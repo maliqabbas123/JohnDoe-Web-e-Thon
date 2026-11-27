@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.7.0
+  version: 0.8.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -85,6 +85,8 @@ tags:
     description: Account management. Administrator only.
   - name: Question bank
     description: An examiner's reusable topics and questions. Examiner only; each examiner sees only their own.
+  - name: Grading
+    description: Review and grade closed submissions for an examiner's own exam.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -1053,6 +1055,136 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /exams/{id}/grading:
+    get:
+      tags: [Grading]
+      operationId: listGradingQueue
+      summary: List written answers awaiting a mark
+      description: |
+        Examiner only, for an exam they own. Includes written responses from
+        submitted and expired attempts, including blank responses. Entries
+        are ordered by oldest submission first.
+
+        **UI notes:** Open the attempt review using `attemptId`, then go to
+        `position`. Use `meta.nextCursor` to load more, or reload the first
+        page after grading. An empty page with a null cursor means there are
+        no more answers. Sandbox previews are excluded.
+      parameters:
+        - $ref: "#/components/parameters/GradingExamId"
+        - $ref: "#/components/parameters/PageSize"
+        - name: cursor
+          in: query
+          description: Send back the previous page's nextCursor unchanged.
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: One page of ungraded written answers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/GradingQueueItem" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/review:
+    get:
+      tags: [Grading]
+      operationId: reviewAttempt
+      summary: Review a closed submission
+      description: |
+        Examiner only, for an exam they own. Returns the frozen paper,
+        answers, objective answer key and current marks.
+
+        **UI notes:** Display the returned question and option order. A null
+        total means some answers are waiting for a mark. Do not cache or show
+        this response in candidate views. A live attempt returns `409`.
+        Sandbox previews and attempts from other examiners return `404`.
+      parameters:
+        - $ref: "#/components/parameters/GradingAttemptId"
+      responses:
+        "200":
+          description: Frozen paper, answers and latest grade.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/GradingReview" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+
+  /attempts/{id}/answers/{position}/grade:
+    patch:
+      tags: [Grading]
+      operationId: gradeAnswer
+      summary: Save a mark and feedback on a written answer
+      description: |
+        Examiner only, for a closed submission in an exam they own. Updates
+        the mark and recalculates the attempt's total in one transaction.
+        Changing a released score also supersedes any active issued report.
+
+        **UI notes:** Send a numeric `score` between zero and the answer's
+        `marks`, with at most two decimals. Omit `feedback` to keep it or
+        send null to clear it. Show the `reason` field when changing a mark
+        after release. An unchanged mark can be saved without a reason.
+        Use the returned `attempt` and `answer` to update the view. A
+        `409` means the attempt is still open. A `422` identifies an invalid
+        position, non-written question, bad mark or missing reason.
+      parameters:
+        - $ref: "#/components/parameters/GradingAttemptId"
+        - name: position
+          in: path
+          required: true
+          description: The one-based position from the attempt review.
+          schema: { type: integer, minimum: 1, maximum: 2147483647 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GradeAnswerInput" }
+            example: { score: 2.25, feedback: Correct result. Show your working. }
+      responses:
+        "200":
+          description: Saved answer grade and recalculated attempt total.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [attempt, answer]
+                    properties:
+                      attempt: { $ref: "#/components/schemas/AttemptGrade" }
+                      answer:
+                        type: object
+                        required: [position, manualScore, feedback, gradedAt]
+                        properties:
+                          position: { type: integer, minimum: 1 }
+                          manualScore: { type: number, minimum: 0, multipleOf: 0.01 }
+                          feedback: { type: [string, "null"] }
+                          gradedAt: { $ref: "#/components/schemas/Instant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1102,6 +1234,19 @@ components:
       description: The question's id.
       schema: { type: string, maxLength: 64 }
 
+    GradingExamId:
+      name: id
+      in: path
+      required: true
+      description: The exam's id.
+      schema: { type: string, maxLength: 64 }
+    GradingAttemptId:
+      name: id
+      in: path
+      required: true
+      description: The attempt's id.
+      schema: { type: string, maxLength: 64 }
+
   responses:
     BadRequest:
       description: The body is not valid JSON, is empty, or the request contains an invalid character.
@@ -1129,6 +1274,11 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     NotFound:
       description: No such record, or it is not visible to this user.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AttemptOpenForGrading:
+      description: The attempt is still in progress.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1385,6 +1535,114 @@ components:
           properties:
             failedSignInsLast24Hours: { type: integer }
 
+    GradingCandidate:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+
+    GradingQueueItem:
+      type: object
+      required: [attemptId, position, submittedAt, marks, candidate]
+      properties:
+        attemptId: { type: string }
+        position: { type: integer, minimum: 1 }
+        submittedAt: { $ref: "#/components/schemas/Instant" }
+        marks: { type: number, minimum: 0, multipleOf: 0.01 }
+        candidate: { $ref: "#/components/schemas/GradingCandidate" }
+
+    GradeValue:
+      type: [number, "null"]
+      minimum: 0
+      multipleOf: 0.01
+      description: Null when the score has not been set.
+
+    AttemptGrade:
+      type: object
+      required: [id, gradingStatus, score]
+      properties:
+        id: { type: string }
+        gradingStatus: { type: string, enum: [NEEDS_REVIEW, GRADED] }
+        score: { $ref: "#/components/schemas/GradeValue" }
+
+    GradingReview:
+      allOf:
+        - $ref: "#/components/schemas/AttemptGrade"
+        - type: object
+          required: [exam, candidate, attemptNumber, status, submittedAt, maxScore, resultReleasedAt, questions]
+          properties:
+            exam:
+              type: object
+              required: [id, title]
+              properties:
+                id: { type: string }
+                title: { type: string }
+            candidate: { $ref: "#/components/schemas/GradingCandidate" }
+            attemptNumber: { type: integer, minimum: 1 }
+            status: { type: string, enum: [SUBMITTED, EXPIRED] }
+            submittedAt: { $ref: "#/components/schemas/Instant" }
+            maxScore: { type: number, minimum: 0, multipleOf: 0.01 }
+            resultReleasedAt: { type: [string, "null"], format: date-time }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/GradingReviewQuestion" }
+
+    GradingReviewQuestion:
+      type: object
+      required: [position, type, difficulty, topic, text, options, alsoAccepted, voided, marks, selectedOptionIds, writtenAnswer, autoScore, manualScore, score, feedback, gradedAt]
+      properties:
+        position: { type: integer, minimum: 1 }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        topic:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        text: { type: string }
+        options:
+          type: array
+          items:
+            type: object
+            required: [id, text, isCorrect]
+            properties:
+              id: { type: string }
+              text: { type: string }
+              isCorrect: { type: boolean }
+        alsoAccepted:
+          description: Additional sets of option ids accepted as correct following a dispute.
+          type: array
+          items:
+            type: array
+            items: { type: string }
+        voided: { type: boolean }
+        marks: { type: number, minimum: 0, multipleOf: 0.01 }
+        selectedOptionIds:
+          type: array
+          items: { type: string }
+        writtenAnswer: { type: [string, "null"] }
+        autoScore: { $ref: "#/components/schemas/GradeValue" }
+        manualScore: { $ref: "#/components/schemas/GradeValue" }
+        score: { $ref: "#/components/schemas/GradeValue" }
+        feedback: { type: [string, "null"] }
+        gradedAt: { type: [string, "null"], format: date-time }
+
+    GradeAnswerInput:
+      type: object
+      additionalProperties: false
+      required: [score]
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 99999.99
+          multipleOf: 0.01
+          description: Also limited by the question's marks.
+        feedback: { type: [string, "null"], maxLength: 5000 }
+        reason: { type: string, minLength: 1, maxLength: 1000, description: Required for changing a released mark. }
+
     QuestionType:
       type: string
       enum: [SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN]
@@ -1605,6 +1863,7 @@ components:
         - USER_UPDATED
         - USER_SESSIONS_REVOKED
         - USER_SIGN_IN_UNLOCKED
+        - ANSWER_GRADED
 
     AuditEntry:
       type: object

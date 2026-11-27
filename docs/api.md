@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank and Question import. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import and Grading. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -26,7 +26,7 @@ Lists add paging information:
 { "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
 ```
 
-The audit log and import history use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
+The audit log, import history and grading queue use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
 
 ```json
 { "data": [], "meta": { "pageSize": 20, "nextCursor": null } }
@@ -96,7 +96,8 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Monitoring | `GET /exams/{id}/monitor` | E | Live attempts, progress, connection, incidents |
 | | `POST /attempts/{id}/incidents` | C | Report exam-page events |
 | | `GET /exams/{id}/announcements`, `POST /exams/{id}/announcements` | E | List; send |
-| Grading | `GET /exams/{id}/grading` | E | Answers waiting for a mark |
+| Grading | `GET /exams/{id}/grading` | E | Written answers waiting for a mark, cursor-paged |
+| | `GET /attempts/{id}/review` | E | Review a closed submission, including the frozen answer key |
 | | `PATCH /attempts/{id}/answers/{position}/grade` | E | Mark a written answer |
 | Integrity | `GET /attempts/{id}/integrity` | E | Signal summary for one attempt |
 | | `PUT /attempts/{id}/integrity/review` | E | Record the examiner's conclusion |
