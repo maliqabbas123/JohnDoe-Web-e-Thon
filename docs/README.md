@@ -2,6 +2,8 @@
 
 | Document | What it covers | Standard |
 |---|---|---|
+| [Contributing](contributing.md) | Setup, workflow, definition of done, code and test conventions, known traps | Contributor guide |
+| [Roadmap](roadmap.md) | What is built, what is left, the three workstreams, contracts between them, open questions | Delivery plan |
 | [Architecture](architecture.md) | Goals, constraints, context, containers, components, runtime flows, deployment, assumptions | arc42 sections, C4 model diagrams |
 | [Data model](data-model.md) | Entity-relationship diagram, state models, integrity rules, assumptions, data dictionary | ER diagram and data dictionary |
 | [API reference](openapi.yaml) | Every built endpoint with request and response schemas, plus notes for the UI team | OpenAPI 3.1 |

@@ -1,5 +1,7 @@
 # Modules
 
+Conventions, the definition of done and known traps are in `docs/contributing.md`. Rules shared by several exam modules, such as scoring, live in `src/server/exam`.
+
 One folder per module from `docs/architecture.md`. Each follows the same shape:
 
 | File | Contains |

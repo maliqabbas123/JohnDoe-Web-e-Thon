@@ -41,6 +41,8 @@ The app runs at http://localhost:3000. `GET /api/v1/health` reports whether the 
 
 ## Documentation
 
+New contributors: start with [`docs/contributing.md`](docs/contributing.md) and [`docs/roadmap.md`](docs/roadmap.md).
+
 Design documents are in [`docs/`](docs/README.md): architecture (C4), data model with data dictionary, API, security threat model, testing and decision records.
 
 Every pull request runs lint, type-check, unit tests, a dependency audit and the full end-to-end suite in CI.
@@ -79,6 +81,7 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | User management | Built |
 | Administrator overview and audit log | Built |
 | Question bank (topics and questions) | Built |
+| Shared paper and scoring rules | Built |
 | Exams, enrolment, attempts, monitoring, grading, results, reports, import, disputes, integrity | Designed, not built |
 
 The innovation challenge write-up is added with the modules that implement it.
