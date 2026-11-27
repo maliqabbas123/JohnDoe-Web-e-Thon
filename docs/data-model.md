@@ -788,7 +788,10 @@ An issued result report with a public verification code.
 | `verificationCode` | text | no |  | Random public code, also encoded in the QR. |
 | `score` | numeric(7,2) | no |  | Score at the time of issue. |
 | `maxScore` | numeric(7,2) | no |  | Maximum at the time of issue. |
-| `contentHash` | text | no |  | Hash of the report's content, to detect alteration. |
+| `contentHash` | text | no |  | SHA-256 hash of the issued PDF bytes. |
+| `examTitle` | text | yes |  | Exam title at issue for public verification. |
+| `pdfBytes` | bytea | yes |  | Private issued PDF bytes. |
+| `verificationUrl` | text | yes |  | Public verification URL embedded in the PDF. |
 | `issuedById` | text | no |  | References `User`; blocks its deletion. |
 | `issuedAt` | timestamptz | no | `now` | When the report was issued. |
 | `supersededAt` | timestamptz | yes |  | Set when a newer report replaces this one after a score change. |
