@@ -15,3 +15,4 @@ Each record states the context, the decision and its consequences, in the format
 | [0009](0009-disputes.md) | Disputes decided by the examiner, with a permanent score history | Accepted |
 | [0010](0010-integrity-signals.md) | Privacy-first integrity signals, not verdicts | Accepted |
 | [0011](0011-polling-over-websockets.md) | Polling instead of WebSockets | Accepted |
+| [0012](0012-open-sign-up.md) | Open sign-up for candidates and examiners | Accepted |

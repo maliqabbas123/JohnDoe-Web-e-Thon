@@ -51,7 +51,9 @@ Fictional accounts created by `npm run db:seed`. Running it again resets them.
 | Candidate | `candidate@exam.test` | `Candidate-Demo-2026` |
 | Candidate | `candidate2@exam.test` | `Candidate-Demo-2026` |
 
-Sign in with `POST /api/v1/auth/login` and a JSON body of `email` and `password`. The session is kept in an `HttpOnly` cookie.
+Sign in with `POST /api/v1/auth/login` and a JSON body of `email` and `password`. The session is kept in an `HttpOnly` cookie. The role is read from the account, so the same sign-in serves every user type.
+
+New candidates and examiners can register with `POST /api/v1/auth/signup` (`email`, `name`, `password`, and `role` of `CANDIDATE` or `EXAMINER`). Administrator accounts cannot be registered.
 
 ## Status
 

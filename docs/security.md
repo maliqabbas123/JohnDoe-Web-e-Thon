@@ -54,6 +54,8 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
 | Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in and password change; Planned for the rest |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
+| Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
+| Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
 | Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management; per module after that |
 | Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Planned |
 | Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
@@ -109,4 +111,5 @@ Because the last group can be bypassed, the server treats those events as suppor
 | A second device pointed at the screen | Not detectable from a browser |
 | Screenshots | Cannot be prevented; the watermark makes leaks traceable |
 | Three high-severity advisories in a development-only dependency of the Prisma command-line tool | Not part of the running application; the offered fix is a downgrade. Reviewed and accepted |
+| Email addresses are not verified, and sign-up reveals whether an address is registered | No email service is used; sign-up is rate-limited. See [ADR 0012](adr/0012-open-sign-up.md) |
 | No automated dynamic security scan yet | To be run against the deployed application once endpoints exist |

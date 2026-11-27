@@ -136,7 +136,7 @@ flowchart TB
 
 | Module | Responsibility | Brief |
 |---|---|---|
-| auth | Sign-in, sign-out, current user, password change, sessions | 3.1 |
+| auth | Sign-up, sign-in, sign-out, current user, password change, sessions | 3.1 |
 | users | Administrator manages accounts, roles and activation | 3.1 |
 | questions | Topics, questions, options, difficulty labels, archive | 3.3 |
 | exams | Configuration, pool, difficulty mix, lifecycle, pre-publish review, rules for candidates | 3.2 |
