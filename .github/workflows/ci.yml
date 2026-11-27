@@ -65,3 +65,18 @@ jobs:
       # starts it and runs every end-to-end test against it.
       - name: Build and end-to-end tests
         run: npm run test:e2e
+
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: exam-platform/package-lock.json
+      - run: npm ci
+        working-directory: exam-platform
+      - run: npm run build
+        working-directory: exam-platform

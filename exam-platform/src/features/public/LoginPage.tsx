@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { LiveAccountForm } from './LiveAccountForm'
+import { isLive } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 import { Button, Field } from '../../components/shared'
@@ -9,6 +11,10 @@ import { home, useStore } from '../../context/MockStoreContext'
 import { Password, PublicCard } from './shared'
 
 export function LoginPage() {
+  return isLive ? <LiveAccountForm /> : <DemoLoginPage />
+}
+
+function DemoLoginPage() {
   const { state, login } = useStore(),
     [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),

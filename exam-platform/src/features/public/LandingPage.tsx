@@ -5,12 +5,11 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Badge, Button, Heading } from '../../components/shared'
 import { home, useStore } from '../../context/MockStoreContext'
+import { isLive } from '@/lib/api'
 
 import { Lookup, demos, features } from './shared'
 
 export function LandingPage() {
-  const { login, state } = useStore()
-  const router = useRouter()
   return (
     <main>
       <section className="hero">
@@ -28,9 +27,9 @@ export function LandingPage() {
             </p>
             <div className="actions">
               <Button to="/login">Sign in to workspace</Button>
-              <a className="button secondary" href="#demo">
-                Explore demo roles
-              </a>
+              {isLive ? <Button secondary to="/signup">Create an account</Button> : (
+                <a className="button secondary" href="#demo">Explore demo roles</a>
+              )}
             </div>
           </div>
           <div className="hero-art">
@@ -41,7 +40,7 @@ export function LandingPage() {
               height={512}
               priority
             />
-            <div className="art-card">
+            {!isLive && <div className="art-card">
               <span className="art-icon">
                 <FileCheck2 size={23} />
               </span>
@@ -50,10 +49,33 @@ export function LandingPage() {
                 <small>Published examination result</small>
               </span>
               <Badge>Verified</Badge>
-            </div>
+            </div>}
           </div>
         </div>
       </section>
+      {!isLive && <DemoWorkspaces />}
+      <section className="feature-section">
+        <div className="public-width">
+          <Heading title="From question bank to scorecard" />
+          <div className="demo-grid">
+            {features.map(({ Icon, title, description }) => (
+              <article key={title}>
+                <Icon size={24} />
+                <h3>{title}</h3>
+                <p>{description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function DemoWorkspaces() {
+  const { login, state } = useStore()
+  const router = useRouter()
+  return (
       <div className="public-width landing-body">
         <section className="verify-strip" aria-labelledby="verify-title">
           <span className="feature-icon">
@@ -96,20 +118,5 @@ export function LandingPage() {
           </div>
         </section>
       </div>
-      <section className="feature-section">
-        <div className="public-width">
-          <Heading title="From question bank to scorecard" />
-          <div className="demo-grid">
-            {features.map(({ Icon, title, description }) => (
-              <article key={title}>
-                <Icon size={24} />
-                <h3>{title}</h3>
-                <p>{description}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-    </main>
   )
 }
