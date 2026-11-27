@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading and Exams. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams and Workspace preferences. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -118,7 +118,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Import | `POST /import/questions` | E | Bulk import questions from CSV or JSON |
 | | `GET /import/jobs` | E | Own past imports with row errors |
 | | `POST /import/candidates` | E | Planned candidate import |
-| Workspace | `GET /me/preferences`, `PUT /me/preferences` | C | Exam workspace settings |
+| Workspace | `GET /me/preferences`, `PUT /me/preferences` | C | Read or replace the signed-in candidate’s workspace settings |
 
 ## 3. Contract for the exam page
 
