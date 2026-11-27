@@ -46,13 +46,14 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Planned |
 | Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |
 | Tampering | Changing the device clock to gain time | Deadline fixed at start and compared with the server clock | Planned |
-| Tampering | Injection through input | Parameterised queries only; schema validation on every input | Built for auth and users; per module after that |
+| Tampering | Injection through input | Parameterised queries only; schema validation on every input; search terms treated as literal text; NUL characters and malformed ids refused before any query | Built for auth and users; per module after that |
 | Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in and user changes; Planned for grading and disputes |
 | Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
 | Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
 | Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in and password change; Planned for the rest |
+| Denial of service | Oversized request bodies | JSON bodies over 64 KB are refused with 413 | Built |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
@@ -69,7 +70,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | A03 Injection | Prisma parameterised queries, Zod validation, no HTML rendering of user content by the API | Built (queries) |
 | A04 Insecure design | Threat model, decision records, server-authoritative time, frozen papers, idempotent operations | Built (design) |
 | A05 Security misconfiguration | Security headers, `no-store` API responses, no framework banner, generic errors | Built |
-| A06 Vulnerable components | `npm audit` reviewed; lockfile committed | Built |
+| A06 Vulnerable components | Lockfile committed; all dependencies audited on every pull request, which fails on a high-severity advisory | Built |
 | A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Built |
 | A08 Software and data integrity failures | Lockfile, migrations in version control, report content hashes | Built (lockfile, migrations) |
 | A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in and user changes; per module after that |
@@ -110,6 +111,5 @@ Because the last group can be bypassed, the server treats those events as suppor
 |---|---|
 | A second device pointed at the screen | Not detectable from a browser |
 | Screenshots | Cannot be prevented; the watermark makes leaks traceable |
-| Three high-severity advisories in a development-only dependency of the Prisma command-line tool | Not part of the running application; the offered fix is a downgrade. Reviewed and accepted |
 | Email addresses are not verified, and sign-up reveals whether an address is registered | No email service is used; sign-up is rate-limited. See [ADR 0012](adr/0012-open-sign-up.md) |
 | No automated dynamic security scan yet | To be run against the deployed application once endpoints exist |
