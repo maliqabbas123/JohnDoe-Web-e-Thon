@@ -130,16 +130,22 @@ it("serializes heartbeat and monitor races without orphaned or duplicate gaps", 
   assert.equal((await examiner.client.get(monitor())).body.data[0].connection, "ONLINE");
 });
 
-it("reports elapsed attempts as expired without touching closure or contact data", async () => {
+it("finalizes elapsed attempts without changing contact data", async () => {
   await sql(`UPDATE "Attempt" SET "deadlineAt" = now() - interval '1 second',
      "lastSeenAt" = now() - interval '60 seconds' WHERE id = $1`, [attempt]);
-  const [before] = await sql('SELECT * FROM "Attempt" WHERE id = $1', [attempt]);
+  const [before] = await sql<{ lastSeenAt: Date; deadlineAt: Date }>(
+    'SELECT "lastSeenAt", "deadlineAt" FROM "Attempt" WHERE id = $1', [attempt],
+  );
   const response = await candidate.client.post(heartbeat());
   assert.equal(response.status, 200, response.text);
   assert.equal(response.body.data.status, "EXPIRED");
   assert.equal((await candidate.client.post(incidents(), tab)).status, 409);
   assert.equal((await examiner.client.get(monitor())).body.data[0].status, "EXPIRED");
-  assert.deepEqual(await sql('SELECT * FROM "Attempt" WHERE id = $1', [attempt]), [before]);
+  const [stored] = await sql(
+    'SELECT status, "gradingStatus", "submittedAt", "lastSeenAt", "deadlineAt" FROM "Attempt" WHERE id = $1', [attempt],
+  );
+  assert.deepEqual(stored, { ...before, status: "EXPIRED", gradingStatus: "NEEDS_REVIEW", submittedAt: before.deadlineAt });
+  assert.equal((await examiner.client.get(`/exams/${exam.id}/grading`)).body.data.length, 2);
   assert.deepEqual(await disruptions(), []);
 });
 

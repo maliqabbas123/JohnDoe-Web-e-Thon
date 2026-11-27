@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.15.0
+  version: 0.16.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -99,6 +99,8 @@ tags:
     description: Exam rosters, retake slots and candidate availability.
   - name: Results
     description: Examiner result release and analytics, and candidate review of released results.
+  - name: Attempts
+    description: Candidate exam delivery, answers, submission and examiner previews.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -1541,6 +1543,192 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /exams/{id}/attempts:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Attempts]
+      operationId: startCandidateAttempt
+      summary: Start or resume an exam attempt
+      description: |
+        **UI notes:** Show the candidate’s rules before sending rulesAccepted. Use a 201 response to open a new attempt and a 200 response to resume an existing one. A 409 means no eligible slot or the paper is unavailable. Use deadlineAt and serverTime for the countdown.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartCandidateAttemptRequest" }
+      responses:
+        "200":
+          description: Start or resume an exam attempt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "201":
+          description: Start or resume an exam attempt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    get:
+      tags: [Attempts]
+      operationId: getCandidateAttempt
+      summary: Read an attempt and its question statuses
+      description: |
+        **UI notes:** Use currentPosition, answered and flagged to restore the exam view. Compare deadlineAt with serverTime. An elapsed attempt is closed before its state is returned.
+      responses:
+        "200":
+          description: Read an attempt and its question statuses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attempts/{id}/questions/{position}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+      - { $ref: "#/components/parameters/CandidateQuestionPosition" }
+    get:
+      tags: [Attempts]
+      operationId: getCandidateAttemptQuestion
+      summary: Open one question on the paper
+      description: |
+        **UI notes:** Display the returned question and restore its saved answer and revision. Use this endpoint for navigation, as opening a different position records server-side timing. Display aiNotice when present and apply the hidden marker instruction when honeypot is present. On 409, show the closed attempt state.
+      responses:
+        "200":
+          description: Open one question on the paper.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateQuestionResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+
+  /attempts/{id}/answers/{position}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+      - { $ref: "#/components/parameters/CandidateQuestionPosition" }
+    put:
+      tags: [Attempts]
+      operationId: saveCandidateAttemptAnswer
+      summary: Autosave answer fields or a review flag
+      description: |
+        **UI notes:** Send revision starting at one and increment it for each new edit. Send only fields that changed. Send selectedOptionIds for choice questions or writtenAnswer for written answers. An accepted false response means the stored revision is newer or equal. Use the returned revision and savedAt to confirm saves. Send cumulative keystroke and paste counts. A 409 means no more changes can be saved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCandidateAnswerRequest" }
+      responses:
+        "200":
+          description: Autosave answer fields or a review flag.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveCandidateAnswerResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/scratchpad:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    put:
+      tags: [Attempts]
+      operationId: saveCandidateScratchpad
+      summary: Save the attempt scratchpad
+      description: |
+        **UI notes:** Send the complete text and serialize saves in the client. The exam state response restores the last saved scratchpad. A 409 means the attempt has closed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCandidateScratchpadRequest" }
+      responses:
+        "200":
+          description: Save the attempt scratchpad.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveCandidateScratchpadResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/submit:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    post:
+      tags: [Attempts]
+      operationId: submitCandidateAttempt
+      summary: Submit an attempt and score objective answers
+      description: |
+        **UI notes:** Flush pending saves before submitting. The response can be SUBMITTED or EXPIRED. Retrying returns the same submission state and timestamp. Written answers appear in the examiner’s grading queue.
+      responses:
+        "200":
+          description: Submit an attempt and score objective answers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmitCandidateAttemptResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /exams/{id}/sandbox:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Attempts]
+      operationId: startExamSandbox
+      summary: Preview the exam as a candidate
+      description: |
+        **UI notes:** Owners can preview a draft with a complete paper. The preview has its own deadline and uses the candidate attempt routes. A 200 resumes an open preview. A 409 means the paper is incomplete.
+      responses:
+        "200":
+          description: Preview the exam as a candidate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "201":
+          description: Preview the exam as a candidate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+    delete:
+      tags: [Attempts]
+      operationId: resetExamSandbox
+      summary: Reset an examiner’s exam preview
+      description: |
+        **UI notes:** Discard the examiner’s preview attempts for this exam. A 204 response has no body.
+      responses:
+        "204":
+          description: Reset an examiner’s exam preview.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -1663,7 +1851,7 @@ paths:
         returned server time and fixed deadline for the countdown. Send the
         last announcementCursor as cursor. If hasMoreAnnouncements is true,
         fetch the next page immediately. Stop when status is SUBMITTED or
-        EXPIRED. EXPIRED is reported as soon as the deadline elapses.
+        EXPIRED. An elapsed attempt is finalized from its last saved answers.
       parameters:
         - { $ref: "#/components/parameters/AttemptId" }
         - { $ref: "#/components/parameters/AnnouncementCursor" }
@@ -2383,7 +2571,18 @@ components:
       in: query
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
 
+    CandidateQuestionPosition:
+      name: position
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1, maximum: 999 }
+
   responses:
+    CandidateAttemptConflict:
+      description: The attempt has closed, its slot is unavailable, or the paper cannot be served.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     EnrolmentConflict:
       description: The candidate has already attempted this exam.
       content:
@@ -3741,6 +3940,159 @@ components:
             instructions: { type: string }
             rules: { $ref: "#/components/schemas/ExamCandidateRules" }
             serverTime: { $ref: "#/components/schemas/Instant" }
+
+    StartCandidateAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [rulesAccepted]
+      properties:
+        rulesAccepted: { const: true }
+    CandidateAttemptStatus:
+      type: string
+      enum: [IN_PROGRESS, SUBMITTED, EXPIRED]
+    CandidateAttemptStart:
+      type: object
+      required: [id, examId, attemptNumber, status, isSandbox, retakeGrantId, deadlineAt, questionCount, serverTime]
+      properties:
+        id: { type: string }
+        examId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        status: { $ref: "#/components/schemas/CandidateAttemptStatus" }
+        isSandbox: { type: boolean }
+        retakeGrantId: { type: [string, "null"] }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        questionCount: { type: integer, minimum: 0 }
+        serverTime: { $ref: "#/components/schemas/Instant" }
+    CandidateAttemptStartResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/CandidateAttemptStart" }
+    CandidateAttemptResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/CandidateAttemptStart" }
+          required: [submittedAt, currentPosition, scratchpad, questions]
+          properties:
+            submittedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+            currentPosition: { type: integer, minimum: 1 }
+            scratchpad: { type: string }
+            questions:
+              type: array
+              items:
+                type: object
+                required: [position, marks, flagged, answered]
+                properties:
+                  position: { type: integer, minimum: 1 }
+                  marks: { type: number }
+                  flagged: { type: boolean }
+                  answered: { type: boolean }
+    CandidateQuestionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [position, type, text, options, marks, answer, aiNotice, honeypot, deadlineAt, serverTime]
+          properties:
+            position: { type: integer, minimum: 1 }
+            type: { type: string, enum: [SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN] }
+            text: { type: string }
+            options:
+              type: array
+              items:
+                type: object
+                required: [id, text]
+                properties:
+                  id: { type: string }
+                  text: { type: string }
+            marks: { type: number }
+            answer:
+              type: object
+              required: [selectedOptionIds, writtenAnswer, flagged, revision, savedAt, keystrokeCount, pasteCount]
+              properties:
+                selectedOptionIds:
+                  type: array
+                  items: { type: string }
+                writtenAnswer: { type: [string, "null"] }
+                flagged: { type: boolean }
+                revision: { type: integer, minimum: 0 }
+                savedAt:
+                  oneOf:
+                    - { $ref: "#/components/schemas/Instant" }
+                    - { type: "null" }
+                keystrokeCount: { type: integer, minimum: 0 }
+                pasteCount: { type: integer, minimum: 0 }
+            aiNotice: { type: [string, "null"] }
+            honeypot: { type: [string, "null"] }
+            deadlineAt: { $ref: "#/components/schemas/Instant" }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SaveCandidateAnswerRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 2
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 1, maximum: 2147483647 }
+        selectedOptionIds:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        writtenAnswer: { type: [string, "null"], maxLength: 10000 }
+        flagged: { type: boolean }
+        keystrokeCount: { type: integer, minimum: 0, maximum: 2147483647 }
+        pasteCount: { type: integer, minimum: 0, maximum: 2147483647 }
+    SaveCandidateAnswerResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accepted, revision, savedAt, flagged, answered, serverTime]
+          properties:
+            accepted: { type: boolean }
+            revision: { type: integer, minimum: 0 }
+            savedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+            flagged: { type: boolean }
+            answered: { type: boolean }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SaveCandidateScratchpadRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 10000 }
+    SaveCandidateScratchpadResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [text, serverTime]
+          properties:
+            text: { type: string }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SubmitCandidateAttemptResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status, submittedAt]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [SUBMITTED, EXPIRED] }
+            submittedAt: { $ref: "#/components/schemas/Instant" }
 
     AuditAction:
       type: string

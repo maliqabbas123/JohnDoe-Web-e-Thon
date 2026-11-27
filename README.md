@@ -87,12 +87,15 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Exams (drafts, paper review, publication and join codes) | Built |
 | Candidate workspace preferences | Built |
 | Enrolment (rosters, joining by code and retake grants) | Built |
+| Attempts (paper delivery, autosave, grading handoff and sandbox) | Built |
 | Examiner monitoring, disruptions and announcements | Built |
 | Results and analytics | Built |
 | Post-submission integrity signals and examiner review | Built |
 | Candidate import (CSV and JSON) | Built |
-| Attempts, reports, disputes | Designed, not built |
+| Reports and disputes | Designed, not built |
 
 **5.1 Integrity review.** After submission, the examiner can review server-recorded signals for timing, typing counts, similar responses, and the attempt's marker. The examiner can save a review note in the same view.
+
+Balanced papers (5.2) use largest remainders to translate difficulty percentages into question counts. Draws rotate across topics within each difficulty. Every paper follows the same difficulty mix and total marks. A candidate’s questions and marking scheme are frozen when their attempt starts.
 
 **5.3 Disruption resilience.** Candidate heartbeats and examiner polling record contact gaps over 45 seconds. Candidates reconnect on the same fixed deadline. Examiners can see when contact was lost and restored.
