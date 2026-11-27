@@ -51,6 +51,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in, user changes and grading; planned for disputes |
 | Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
 | Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
+| Information disclosure | Reading another candidate’s workspace preferences | Both routes require the candidate role and use the signed-in user ID for the database lookup | Built |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
 | Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change and question import; Planned for autosave and candidate import |

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.9.0
+  version: 0.10.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -89,6 +89,8 @@ tags:
     description: Review and grade closed submissions for an examiner's own exam.
   - name: Exams
     description: Exam configuration and publication. Examiner only.
+  - name: Workspace
+    description: A candidate’s saved exam workspace settings.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -286,6 +288,64 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
+
+  /me/preferences:
+    get:
+      tags: [Workspace]
+      operationId: getWorkspacePreferences
+      summary: Read your workspace preferences
+      description: |
+        Candidate only. Returns the signed-in candidate's settings.
+
+        **UI notes:** Load these settings when the candidate opens the exam
+        workspace. The response always includes all four fields. Unsaved
+        fields, including for first-time candidates, use the schema defaults.
+        Reading preferences does not create a record.
+      responses:
+        "200":
+          description: Current workspace settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/WorkspacePreferences" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Workspace]
+      operationId: saveWorkspacePreferences
+      summary: Replace your workspace preferences
+      description: |
+        Candidate only. Saves the settings to the signed-in candidate's account
+        and returns the complete saved object.
+
+        **UI notes:** Send all current fields when editing one value. Omitted
+        fields reset to their schema defaults. Send an empty JSON object to
+        reset all preferences. Unknown fields receive 422. Use the values
+        returned by the server after saving. Preferences apply across sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkspacePreferencesInput" }
+            example: { theme: dark, fontSize: 20, lineSpacing: 1.75, palettePosition: left }
+      responses:
+        "200":
+          description: Saved workspace settings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/WorkspacePreferences" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /users:
     get:
@@ -2056,6 +2116,39 @@ components:
               field: { type: string, examples: [topicId, options.0.text, row] }
               message: { type: string }
         createdAt: { $ref: "#/components/schemas/Instant" }
+
+    WorkspacePreferencesInput:
+      type: object
+      additionalProperties: false
+      properties:
+        theme:
+          type: string
+          enum: [system, light, dark]
+          default: system
+          description: Use the browser color scheme when set to system.
+        fontSize:
+          type: integer
+          minimum: 12
+          maximum: 32
+          default: 16
+          description: Question text size in CSS pixels.
+        lineSpacing:
+          type: number
+          minimum: 1
+          maximum: 2
+          multipleOf: 0.25
+          default: 1.5
+          description: Line-height multiplier for question text.
+        palettePosition:
+          type: string
+          enum: [left, right]
+          default: right
+          description: Side of the exam workspace for the question navigation palette.
+
+    WorkspacePreferences:
+      allOf:
+        - { $ref: "#/components/schemas/WorkspacePreferencesInput" }
+        - required: [theme, fontSize, lineSpacing, palettePosition]
 
     UserActivity:
       type: object

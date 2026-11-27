@@ -448,7 +448,7 @@ A candidate's exam workspace settings, kept across devices.
 | Column | Type | Null | Default | Description |
 |---|---|---|---|---|
 | `userId` | text | no |  | References `User`; deleted with it. |
-| `workspace` | jsonb | no | `{}` | Validated settings object: layout, font size, theme, palette position. |
+| `workspace` | jsonb | no | `{}` | Validated settings object with theme, font size, line spacing and question palette position. |
 | `updatedAt` | timestamptz | no |  | When the row was last changed. |
 
 ### Question bank

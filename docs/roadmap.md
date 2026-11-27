@@ -23,7 +23,7 @@ What is built, what is left, and how the remaining work is split so that three p
 | Integrity analysis | Not started | 5.1 |
 | Question import | Built | 4.4 |
 | Candidate import | Not started | 4.4 |
-| Workspace preferences | Not started | 4.7 |
+| Workspace preferences | Built | 4.7 |
 | Deployment | Not started | 07 |
 
 The core schema is migrated. The Exams module adds the unique, nullable join code.

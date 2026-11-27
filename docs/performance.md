@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Measured for the administrator endpoints, question bank, import history and exams. Each module adds its reads to the measurement suite |
+| Status | Measured for the administrator endpoints, question bank, import history, exams and workspace preferences. Each module adds its reads to the measurement suite |
 | Related | [Testing](testing.md), [Data model](data-model.md) |
 
 ## 1. Approach
@@ -73,6 +73,14 @@ Measured with 32,000 exams across 301 examiners. The signed-in examiner owned 2,
 | Upcoming published exams, page 10 with 100 per page | 11.5 | 14.1 | 70 |
 | Exam detail | 16.5 | 22.6 | 80 |
 | Exam review | 12.7 | 21.4 | 70 |
+
+### Candidate workspace preferences
+
+Measured with 20,001 saved preference records. The request reads one row by the signed-in candidate's primary key.
+
+| Read | Median | 95th percentile | 95th percentile budget |
+|---|---|---|---|
+| `GET /me/preferences` | 4.9 ms | 7.2 ms | 20 ms |
 
 ## 3. What was changed and why
 
