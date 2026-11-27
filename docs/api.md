@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment and Monitoring. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment, Monitoring, Results and Analytics. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -26,7 +26,7 @@ Lists add paging information:
 { "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
 ```
 
-The audit log, import history and grading queue use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
+The audit log, import history, grading queue, result lists, paper fairness and question analytics use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
 
 ```json
 { "data": [], "meta": { "pageSize": 20, "nextCursor": null } }
@@ -102,7 +102,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `PATCH /attempts/{id}/answers/{position}/grade` | E | Mark a written answer |
 | Integrity | `GET /attempts/{id}/integrity` | E | Signal summary for one attempt |
 | | `PUT /attempts/{id}/integrity/review` | E | Record the examiner's conclusion |
-| Results | `GET /exams/{id}/results` | E | Scores before and after release |
+| Results | `GET /exams/{id}/results` | E | Policy-selected attempt, score, grading and release state for each enrolled candidate |
 | | `POST /exams/{id}/results/release` | E | Release results |
 | | `GET /me/results`, `GET /me/results/{attemptId}` | C | Own released results and attempt review |
 | | `GET /exams/{id}/analytics` | E | Exam statistics and fairness report |

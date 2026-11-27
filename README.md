@@ -88,6 +88,7 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Candidate workspace preferences | Built |
 | Enrolment (rosters, joining by code and retake grants) | Built |
 | Examiner monitoring, disruptions and announcements | Built |
-| Attempts, results, reports, candidate import, disputes, integrity | Designed, not built |
+| Results and analytics | Built |
+| Attempts, reports, candidate import, disputes, integrity | Designed, not built |
 
 **5.3 Disruption resilience.** Candidate heartbeats and examiner polling record contact gaps over 45 seconds. Candidates reconnect on the same fixed deadline. Examiners can see when contact was lost and restored.

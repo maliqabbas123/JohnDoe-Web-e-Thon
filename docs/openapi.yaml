@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.12.0
+  version: 0.13.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -95,6 +95,8 @@ tags:
     description: A candidate’s saved exam workspace settings.
   - name: Enrolment
     description: Exam rosters, retake slots and candidate availability.
+  - name: Results
+    description: Examiner result release and analytics, and candidate review of released results.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -1901,6 +1903,229 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /exams/{id}/results:
+    get:
+      tags: [Results]
+      operationId: listExamResults
+      summary: List the result for each enrolled candidate
+      description: |
+        Examiner only, for an exam they own. Selects each candidate's highest
+        fully graded score with the earliest attempt number breaking a tie
+        under BEST, or their latest fully graded attempt under LATEST.
+
+        **UI notes:** A candidate without a fully graded attempt shows their
+        latest closed attempt, or a null result if they have never submitted.
+        A null release time means the selected attempt is private. Page by
+        candidate id using `meta.nextCursor`.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: List the result for each enrolled candidate.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ExamCandidateResult" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/results/release:
+    post:
+      tags: [Results]
+      operationId: releaseExamResults
+      summary: Release current fully graded results
+      description: |
+        Examiner only, for an exam they own. The release applies to the
+        policy-selected attempt of each candidate. It preserves timestamps for
+        results that were already released.
+
+        **UI notes:** Send no body. Show the `released` and `alreadyReleased`
+        result counts. `needsReview` counts closed attempts still waiting for
+        marks, which this call skips. A candidate can have an older eligible
+        result and a newer attempt waiting for review. A null release time in
+        the response means this call published zero results.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+      responses:
+        "200":
+          description: Release current fully graded results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ResultRelease" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/results:
+    get:
+      tags: [Results]
+      operationId: listMyResults
+      summary: List the candidate's released results
+      description: |
+        Candidate only. Shows one released result per exam, selected under
+        the exam's result policy from the candidate's released attempts.
+
+        **UI notes:** An eligible private retake leaves the prior released
+        result visible. Page newest release first using `meta.nextCursor`
+        and open the detail using the returned `attemptId`.
+      parameters:
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: List the candidate's released results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CandidateResult" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/results/{attemptId}:
+    get:
+      tags: [Results]
+      operationId: getMyResult
+      summary: Read a released result and review the submitted answers
+      description: |
+        Candidate only. Accessible for their own released attempts, including
+        results superseded by a later release. Other candidates' results,
+        private attempts and sandbox attempts return 404.
+
+        **UI notes:** Render questions and options in the supplied order. Use
+        `answerKey` only when present. It appears for objective questions
+        when the examiner enables answer reveal. The question and its answer
+        key come from the frozen attempt.
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read a released result and review the submitted answers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/CandidateResultReview" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /exams/{id}/analytics:
+    get:
+      tags: [Results]
+      operationId: getExamAnalytics
+      summary: Read score statistics and paper fairness
+      description: |
+        Examiner only, for an exam they own. Score statistics use one fully
+        graded result per candidate according to the exam's policy, including
+        private results. Distribution buckets use percentages, with an
+        exclusive upper bound except for the final bucket, which includes 100.
+
+        **UI notes:** Use `fairness.meta.nextCursor` to page papers. Each paper
+        is assessed using scores from other attempts on each question, weighted
+        by its marks. Difficulty is one minus the expected mark fraction.
+        At least three other scores on every question are required. A flag
+        means the paper differs from the mean of other comparable papers by
+        at least 0.15 on the zero-to-one scale. Missing evidence yields a
+        null value or flag. The report leaves scores untouched.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read score statistics and paper fairness.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ExamAnalytics" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/analytics/questions:
+    get:
+      tags: [Results]
+      operationId: listQuestionAnalytics
+      summary: Read per-question statistics for an exam
+      description: |
+        Examiner only, for an exam they own. Counts appearances on closed
+        attempts, including attempts waiting for written grades.
+
+        **UI notes:** `correctRate` divides correct answers by all servings.
+        Written questions have null correctness and wrong-option statistics.
+        Average time includes unopened questions. The label and text come from
+        the most recent served snapshot. Observed difficulty uses mean mark
+        fraction across scored answers, with EASY at 0.70 or above, MEDIUM
+        at 0.40 or above, and HARD below 0.40. Wrong-option counts exclude
+        accepted options and voided versions. Use `meta.nextCursor` to page.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read per-question statistics for an exam.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/QuestionAnalytics" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2393,6 +2618,169 @@ components:
           description: Also limited by the question's marks.
         feedback: { type: [string, "null"], maxLength: 5000 }
         reason: { type: string, minLength: 1, maxLength: 1000, description: Required for changing a released mark. }
+
+    ExamCandidateResult:
+      type: object
+      required: [candidate, result]
+      properties:
+        candidate: { $ref: "#/components/schemas/GradingCandidate" }
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/ExamAttemptResult"
+            - type: "null"
+
+    ExamAttemptResult:
+      type: object
+      required: [attemptId, attemptNumber, status, gradingStatus, submittedAt, score, maxScore, resultReleasedAt]
+      properties:
+        attemptId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        status: { type: string, enum: [SUBMITTED, EXPIRED] }
+        gradingStatus: { type: string, enum: [PENDING, NEEDS_REVIEW, GRADED] }
+        submittedAt: { $ref: "#/components/schemas/Instant" }
+        score: { $ref: "#/components/schemas/GradeValue" }
+        maxScore: { type: number }
+        resultReleasedAt: { type: [string, "null"], format: date-time }
+
+    ResultRelease:
+      type: object
+      required: [released, alreadyReleased, needsReview, releasedAt]
+      properties:
+        released: { type: integer, minimum: 0 }
+        alreadyReleased: { type: integer, minimum: 0 }
+        needsReview: { type: integer, minimum: 0 }
+        releasedAt: { type: [string, "null"], format: date-time }
+
+    CandidateResult:
+      type: object
+      required: [attemptId, attemptNumber, submittedAt, score, maxScore, resultReleasedAt, exam]
+      properties:
+        attemptId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        submittedAt: { $ref: "#/components/schemas/Instant" }
+        score: { type: number }
+        maxScore: { type: number }
+        resultReleasedAt: { $ref: "#/components/schemas/Instant" }
+        exam:
+          type: object
+          required: [id, title]
+          properties:
+            id: { type: string }
+            title: { type: string }
+
+    CandidateResultReview:
+      allOf:
+        - $ref: "#/components/schemas/CandidateResult"
+        - type: object
+          required: [revealAnswers, questions]
+          properties:
+            revealAnswers: { type: boolean }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/CandidateResultQuestion" }
+
+    CandidateResultQuestion:
+      type: object
+      required: [position, type, text, options, marks, score, selectedOptionIds, writtenAnswer, feedback]
+      properties:
+        position: { type: integer, minimum: 1 }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        text: { type: string }
+        options:
+          type: array
+          items:
+            type: object
+            required: [id, text]
+            properties:
+              id: { type: string }
+              text: { type: string }
+        marks: { type: number }
+        score: { $ref: "#/components/schemas/GradeValue" }
+        selectedOptionIds:
+          type: array
+          items: { type: string }
+        writtenAnswer: { type: [string, "null"] }
+        feedback: { type: [string, "null"] }
+        answerKey:
+          type: object
+          required: [correctOptionIds, alsoAccepted, voided]
+          properties:
+            correctOptionIds:
+              type: array
+              items: { type: string }
+            alsoAccepted:
+              type: array
+              items:
+                type: array
+                items: { type: string }
+            voided: { type: boolean }
+
+    ExamAnalytics:
+      type: object
+      required: [scores, fairness]
+      properties:
+        scores:
+          type: object
+          required: [count, mean, median, min, max, distribution]
+          properties:
+            count: { type: integer, minimum: 0 }
+            mean: { type: [number, "null"] }
+            median: { type: [number, "null"] }
+            min: { type: [number, "null"] }
+            max: { type: [number, "null"] }
+            distribution:
+              type: array
+              items:
+                type: object
+                required: [fromPercent, toPercent, count]
+                properties:
+                  fromPercent: { type: integer }
+                  toPercent: { type: integer }
+                  count: { type: integer, minimum: 0 }
+        fairness:
+          type: object
+          required: [minimumOtherScores, outlierDistance, comparablePapers, papers, meta]
+          properties:
+            minimumOtherScores: { type: integer }
+            outlierDistance: { type: number }
+            comparablePapers: { type: integer }
+            papers:
+              type: array
+              items: { $ref: "#/components/schemas/PaperFairness" }
+            meta: { $ref: "#/components/schemas/CursorMeta" }
+
+    PaperFairness:
+      type: object
+      required: [attemptId, questionCount, comparedQuestions, observedDifficulty, peerDifficulty, flag]
+      properties:
+        attemptId: { type: string }
+        questionCount: { type: integer }
+        comparedQuestions: { type: integer }
+        observedDifficulty: { type: [number, "null"] }
+        peerDifficulty: { type: [number, "null"] }
+        flag: { type: [string, "null"], enum: [HARDER, EASIER, null] }
+
+    QuestionAnalytics:
+      type: object
+      required: [questionId, text, labelledDifficulty, served, skipped, correct, correctRate, averageTimeSeconds, meanMarkFraction, observedDifficulty, mostChosenWrongOption]
+      properties:
+        questionId: { type: string }
+        text: { type: string }
+        labelledDifficulty: { $ref: "#/components/schemas/Difficulty" }
+        served: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
+        correct: { type: [integer, "null"] }
+        correctRate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        averageTimeSeconds: { type: number }
+        meanMarkFraction: { type: [number, "null"] }
+        observedDifficulty: { type: [string, "null"], enum: [EASY, MEDIUM, HARD, null] }
+        mostChosenWrongOption:
+          type: [object, "null"]
+          required: [id, text, count]
+          properties:
+            id: { type: string }
+            text: { type: string }
+            count: { type: integer }
 
     QuestionType:
       type: string
@@ -3152,6 +3540,7 @@ components:
         - USER_SESSIONS_REVOKED
         - USER_SIGN_IN_UNLOCKED
         - ANSWER_GRADED
+        - RESULT_RELEASED
         - EXAM_PUBLISHED
         - EXAM_UNPUBLISHED
         - EXAM_COMPLETED

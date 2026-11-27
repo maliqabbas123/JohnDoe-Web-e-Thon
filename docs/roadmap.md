@@ -16,7 +16,7 @@ What is built, what is left, and how the remaining work is split so that three p
 | Enrolment, joining by code, retake grants | Built | 3.4 |
 | Attempts, paper draw, sandbox, scratchpad | Not started | 3.5, 4.3, 4.8, 5.2 |
 | Grading | Built | 3.7 |
-| Results and analytics | Not started | 3.8, 4.5, 5.2 |
+| Results and analytics | Built | 3.8, 4.5, 5.2 |
 | Disputes | Not started | 5.4 |
 | Reports and verification | Not started | 4.2, 4.6 |
 | Monitoring, disruptions, announcements | Built | 3.6, 5.3 |
