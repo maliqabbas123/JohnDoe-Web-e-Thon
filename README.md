@@ -93,10 +93,12 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Post-submission integrity signals and examiner review | Built |
 | Candidate import (CSV and JSON) | Built |
 | Candidate disputes | Built |
-| Reports | Designed, not built |
+| Reports and verification | Built |
 
 **5.1 Integrity review.** After submission, the examiner can review server-recorded signals for timing, typing counts, similar responses, and the attempt's marker. The examiner can save a review note in the same view.
 
 Balanced papers (5.2) use largest remainders to translate difficulty percentages into question counts. Draws rotate across topics within each difficulty. Every paper follows the same difficulty mix and total marks. A candidate’s questions and marking scheme are frozen when their attempt starts.
 
 **5.3 Disruption resilience.** Candidate heartbeats and examiner polling record contact gaps over 45 seconds. Candidates reconnect on the same fixed deadline. Examiners can see when contact was lost and restored.
+
+Set `PUBLIC_BASE_URL` to the public API origin in deployment so report QR codes link to the public verification route.

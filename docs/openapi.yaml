@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.17.0
+  version: 0.18.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -103,6 +103,8 @@ tags:
     description: Candidate exam delivery, answers, submission and examiner previews.
   - name: Disputes
     description: Candidate disputes and examiner decisions on released results.
+  - name: Reports
+    description: Private result reports and public code verification.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -2675,6 +2677,85 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /attempts/{id}/report:
+    post:
+      tags: [Reports]
+      operationId: issueReport
+      summary: Issue a report for a released result
+      description: |
+        **UI notes:** Examiner only for an owned attempt. Send no body. A repeat call returns the existing active report.
+        Use the verification URL from the response or download the PDF. After a grade correction, issue a replacement.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      responses:
+        "200":
+          description: The active report already exists.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedReportResponse" }
+        "201":
+          description: The report was issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedReportResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attempts/{id}/report.pdf:
+    get:
+      tags: [Reports]
+      operationId: downloadReport
+      summary: Download the current issued PDF
+      description: |
+        **UI notes:** Authorized for the candidate or the exam owner. Download as a file.
+        If an earlier report was superseded or revoked, an examiner must issue a replacement before another download.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      responses:
+        "200":
+          description: The issued PDF as a download.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /verify/{code}:
+    get:
+      tags: [Reports]
+      operationId: verifyReport
+      summary: Verify an issued report by its code
+      security: []
+      description: |
+        **UI notes:** Public. Display the returned validity, exam title, score and issue time.
+        A superseded or revoked code still identifies the original issue. Requests are limited to 60 per minute per address.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: The recorded validity and public report details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [validity, examTitle, score, issuedAt]
+                    properties:
+                      validity: { type: string, enum: [VALID, SUPERSEDED, REVOKED] }
+                      examTitle: { type: string }
+                      score: { type: number }
+                      issuedAt: { $ref: "#/components/schemas/Instant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3445,6 +3526,22 @@ components:
               decision: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
               decisionReason: { type: [string, "null"] }
               decidedAt: { type: [string, "null"], format: date-time }
+
+    IssuedReportResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, attemptId, verificationCode, verificationUrl, issuedAt, score, maxScore]
+          properties:
+            id: { type: string }
+            attemptId: { type: string }
+            verificationCode: { type: string }
+            verificationUrl: { type: string, format: uri }
+            issuedAt: { $ref: "#/components/schemas/Instant" }
+            score: { type: number }
+            maxScore: { type: number }
 
     QuestionType:
       type: string
@@ -4403,6 +4500,7 @@ components:
         - ANSWER_GRADED
         - RESULT_RELEASED
         - DISPUTE_DECIDED
+        - REPORT_ISSUED
         - EXAM_PUBLISHED
         - EXAM_UNPUBLISHED
         - EXAM_COMPLETED

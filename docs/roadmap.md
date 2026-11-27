@@ -18,7 +18,7 @@ What is built, what is left, and how the remaining work is split so that three p
 | Grading | Built | 3.7 |
 | Results and analytics | Built | 3.8, 4.5, 5.2 |
 | Disputes | Built | 5.4 |
-| Reports and verification | Not started | 4.2, 4.6 |
+| Reports and verification | Built | 4.2, 4.6 |
 | Monitoring, disruptions, announcements | Built | 3.6, 5.3 |
 | Integrity analysis | Built | 5.1 |
 | Question import | Built | 4.4 |
