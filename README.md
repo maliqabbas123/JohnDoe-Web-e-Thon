@@ -60,6 +60,7 @@ Sign in with `POST /api/v1/auth/login` and a JSON body of `email` and `password`
 | Platform foundation | Built |
 | Auth and sessions | Built |
 | User management | Built |
+| Administrator overview and audit log | Built |
 | Question bank, exams, enrolment, attempts, monitoring, grading, results, reports, import, disputes, integrity | Designed, not built |
 
 The innovation challenge write-up is added with the modules that implement it.
