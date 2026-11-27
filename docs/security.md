@@ -42,6 +42,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 |---|---|---|---|
 | Spoofing | Guessing or stuffing passwords | scrypt hashes; rate limit per address and per email; same error for unknown email and wrong password | Built |
 | Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Built |
+| Spoofing | A session believed to be compromised | An administrator can end all of a user's sessions at once | Built |
 | Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Built (previous session ended); incident record Planned |
 | Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Planned |
 | Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |

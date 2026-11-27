@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.4.0
+  version: 0.5.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -425,6 +425,89 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /users/{id}/activity:
+    parameters:
+      - { $ref: "#/components/parameters/UserId" }
+    get:
+      tags: [Users]
+      operationId: getUserActivity
+      summary: Sessions, sign-in history and account changes for one user
+      description: |
+        Administrator only. Everything for a user detail screen in one call:
+        who is signed in, recent sign-in attempts, changes to the account, and
+        whether sign-in is currently locked.
+
+        **UI notes:**
+        - Use together with `GET /users/{id}` to build the user detail page.
+        - `signIns` and `accountChanges` hold at most the 20 newest entries
+          each. For older history, use `GET /admin/audit-logs` with
+          `entityType=User&entityId={id}`.
+        - `sessions` has zero or one entry, because a user has one active
+          session at a time. It is an array so the UI does not need changing
+          if that rule is ever relaxed.
+        - `signInLock.locked` is true after 5 failed sign-ins within 15
+          minutes. Show `until` and offer the unlock action.
+        - `accountChanges[].metadata` for `USER_UPDATED` holds `{ from, to }`
+          pairs per changed field, for example `role`. Use it for a role
+          history. A password reset appears as `passwordReset: true`; the
+          password itself is never present.
+      responses:
+        "200":
+          description: The user's activity.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/UserActivity" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users/{id}/sessions:
+    parameters:
+      - { $ref: "#/components/parameters/UserId" }
+    delete:
+      tags: [Users]
+      operationId: forceSignOut
+      summary: Sign a user out everywhere
+      description: |
+        Administrator only. Ends every session of the user at once. It does not
+        deactivate the account or change the password; the user can sign in
+        again.
+
+        **UI notes:** no body. Safe to repeat. To keep someone out, deactivate
+        the account with `PATCH /users/{id}` instead. If the administrator does
+        this to their own account, their next call returns 401.
+      responses:
+        "204":
+          description: Sessions ended. No body.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users/{id}/sign-in-lock:
+    parameters:
+      - { $ref: "#/components/parameters/UserId" }
+    delete:
+      tags: [Users]
+      operationId: unlockSignIn
+      summary: Lift a sign-in lockout
+      description: |
+        Administrator only. Clears the lock that follows repeated failed
+        sign-ins for this account, so the user can try again immediately. The
+        password is not changed.
+
+        **UI notes:** no body. Safe to call when nothing is locked. It does not
+        lift the separate limit on attempts from one network address.
+      responses:
+        "204":
+          description: Lock lifted. No body.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /admin/overview:
     get:
@@ -855,6 +938,64 @@ components:
           properties:
             failedSignInsLast24Hours: { type: integer }
 
+    UserActivity:
+      type: object
+      required: [sessions, signInLock, signIns, accountChanges]
+      properties:
+        sessions:
+          type: array
+          description: Active sessions, newest first. Never includes the session token.
+          items:
+            type: object
+            required: [id, createdAt, lastSeenAt, expiresAt, ip, userAgent]
+            properties:
+              id: { type: string }
+              createdAt: { $ref: "#/components/schemas/Instant" }
+              lastSeenAt:
+                allOf: [{ $ref: "#/components/schemas/Instant" }]
+                description: Last request made with this session, accurate to about a minute.
+              expiresAt: { $ref: "#/components/schemas/Instant" }
+              ip: { type: [string, "null"] }
+              userAgent: { type: [string, "null"], description: Browser identification. Show it as plain text. }
+        signInLock:
+          type: object
+          required: [locked, until]
+          properties:
+            locked: { type: boolean }
+            until:
+              description: When the lock ends by itself. Null when not locked.
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+        signIns:
+          type: array
+          description: The 20 most recent sign-in attempts, newest first.
+          items:
+            type: object
+            required: [id, succeeded, ip, createdAt]
+            properties:
+              id: { type: string }
+              succeeded: { type: boolean }
+              ip: { type: [string, "null"] }
+              createdAt: { $ref: "#/components/schemas/Instant" }
+        accountChanges:
+          type: array
+          description: The 20 most recent changes to the account, newest first.
+          items:
+            type: object
+            required: [id, action, metadata, ip, createdAt, actor]
+            properties:
+              id: { type: string }
+              action: { type: string, description: See AuditAction. }
+              metadata: { type: [object, "null"], additionalProperties: true }
+              ip: { type: [string, "null"] }
+              createdAt: { $ref: "#/components/schemas/Instant" }
+              actor:
+                description: Who made the change. The user themselves for sign-up and password change.
+                oneOf:
+                  - { $ref: "#/components/schemas/SessionUser" }
+                  - { type: "null" }
+
     AuditAction:
       type: string
       description: |
@@ -869,6 +1010,8 @@ components:
         - PASSWORD_CHANGED
         - USER_CREATED
         - USER_UPDATED
+        - USER_SESSIONS_REVOKED
+        - USER_SIGN_IN_UNLOCKED
 
     AuditEntry:
       type: object

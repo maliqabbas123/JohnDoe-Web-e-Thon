@@ -90,6 +90,8 @@ describe(`read times with ${USERS.toLocaleString("en")} users and ${AUDIT_ENTRIE
   it("user search by email", () => measure("GET /users?q=perf-777@", "/users?q=perf-777%40", 80));
   it("one user", () => measure("GET /users/{id}", "/users/e2e-perf-u-25000", 20));
 
+  it("user activity", () => measure("GET /users/{id}/activity", "/users/e2e-perf-u-123/activity", 20));
+
   it("platform overview", () => measure("GET /admin/overview", "/admin/overview", 30));
 
   it("audit log, first page", () => measure("GET /admin/audit-logs", "/admin/audit-logs", 15));

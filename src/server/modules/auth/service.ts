@@ -5,11 +5,15 @@ import { createSession, revokeSession, revokeUserSessions, type SessionUser } fr
 import { db } from "@/server/db";
 import { errors } from "@/server/http/errors";
 import type { ClientInfo } from "@/server/security/client";
-import { clearRateLimit, consumeRateLimit } from "@/server/security/rate-limit";
+import {
+  SIGN_IN_ACCOUNT_LIMIT,
+  clearRateLimit,
+  consumeRateLimit,
+  signInAccountKey,
+} from "@/server/security/rate-limit";
 import type { ChangePasswordInput, LoginInput, SignupInput } from "./schemas";
 
 const FIFTEEN_MINUTES = 15 * 60;
-const LOGIN_LIMIT_PER_ACCOUNT = { limit: 5, windowSeconds: FIFTEEN_MINUTES };
 const LOGIN_LIMIT_PER_ADDRESS = { limit: 30, windowSeconds: FIFTEEN_MINUTES };
 const PASSWORD_CHANGE_LIMIT = { limit: 5, windowSeconds: FIFTEEN_MINUTES };
 const SIGNUP_LIMIT_PER_ADDRESS = { limit: 10, windowSeconds: 60 * 60 };
@@ -54,9 +58,9 @@ export async function signup(input: SignupInput, client: ClientInfo) {
 
 export async function login(input: LoginInput, client: ClientInfo) {
   const address = client.ip ?? "unknown";
-  const accountKey = `login:${address}:${input.email}`;
+  const accountKey = signInAccountKey(address, input.email);
   await consumeRateLimit(`login:${address}`, LOGIN_LIMIT_PER_ADDRESS);
-  await consumeRateLimit(accountKey, LOGIN_LIMIT_PER_ACCOUNT);
+  await consumeRateLimit(accountKey, SIGN_IN_ACCOUNT_LIMIT);
 
   const user = await db.user.findUnique({
     where: { email: input.email },
