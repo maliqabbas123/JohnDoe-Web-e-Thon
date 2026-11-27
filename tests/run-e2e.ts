@@ -1,7 +1,8 @@
 // Runs the end-to-end tests against a production build and a dedicated test
 // database, so they never touch development data.
 //
-//   npm run test:e2e
+//   npm run test:e2e     functional tests
+//   npm run test:perf    read-time measurements at volume
 //
 // Environment:
 //   DATABASE_URL       Development database URL (from .env). The tests use a
@@ -93,10 +94,14 @@ async function main(): Promise<number> {
 
   try {
     await waitForServer(baseUrl, server);
-    const files = readdirSync(path.join(root, "tests", "e2e"))
-      .filter((file) => file.endsWith(".test.ts"))
+    // "perf" runs the read-time measurements in tests/perf instead of the
+    // functional tests. Both need the same built server and test database.
+    const suite = process.argv.includes("--perf") ? "perf" : "e2e";
+    const suffix = suite === "perf" ? ".perf.ts" : ".test.ts";
+    const files = readdirSync(path.join(root, "tests", suite))
+      .filter((file) => file.endsWith(suffix))
       .sort()
-      .map((file) => path.join("tests", "e2e", file));
+      .map((file) => path.join("tests", suite, file));
 
     // One file at a time: the tests share one database and its rate limits.
     const result = spawnSync("npx", ["tsx", "--test", "--test-concurrency=1", ...files], {

@@ -36,6 +36,7 @@ The app runs at http://localhost:3000. `GET /api/v1/health` reports whether the 
 | `npm run db:studio` | Browse the database |
 | `npm test` | Run unit tests |
 | `npm run test:e2e` | Build, then run every end-to-end test against a separate test database |
+| `npm run test:perf` | Measure read times against large tables |
 | `npm run typecheck` | Type-check |
 
 ## Documentation

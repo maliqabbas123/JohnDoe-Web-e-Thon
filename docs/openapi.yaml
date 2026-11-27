@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.3.0
+  version: 0.4.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -472,9 +472,27 @@ paths:
         - `from` and `to` must be full ISO 8601 times **with a time zone**
           (`2026-11-27T00:00:00Z` or `...+05:00`). A date alone returns 422.
         - `action` is matched exactly, ignoring case.
+        - **Paging is by cursor, not page number**, because the log grows
+          without bound. Request the first page with no `cursor`. To load more,
+          send `meta.nextCursor` back as `cursor` with the same filters.
+          `nextCursor: null` means there is nothing more. Build a "Load more"
+          button or infinite scroll, not numbered pages; you cannot jump to
+          page N.
+        - `meta.total` is absent unless you send `withTotal=true`, and then it
+          comes on the first page only. Counting is the slowest part of the
+          request, so ask for it only if the screen shows a result count, and
+          keep the value in state while loading more.
+        - Treat the cursor as opaque. Do not build or change one.
       parameters:
-        - { $ref: "#/components/parameters/Page" }
+        - name: cursor
+          in: query
+          description: The `meta.nextCursor` value from the previous page. Omit for the first page.
+          schema: { type: string, maxLength: 200 }
         - { $ref: "#/components/parameters/PageSize" }
+        - name: withTotal
+          in: query
+          description: Send `true` to receive `meta.total` on the first page.
+          schema: { type: string, enum: ["true", "false"], default: "false" }
         - name: actorId
           in: query
           description: Id of the user who performed the action.
@@ -511,7 +529,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/AuditEntry" }
-                  meta: { $ref: "#/components/schemas/PageMeta" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -688,6 +706,19 @@ components:
           type: integer
           minimum: 0
           description: Number of items matching the filters, across all pages.
+
+    CursorMeta:
+      type: object
+      required: [pageSize, nextCursor]
+      properties:
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        nextCursor:
+          type: [string, "null"]
+          description: Send as `cursor` to get the next page. Null when there are no more items.
+        total:
+          type: integer
+          minimum: 0
+          description: Number of items matching the filters. Present only on the first page, and only when `withTotal=true` was sent.
 
     SessionUser:
       type: object

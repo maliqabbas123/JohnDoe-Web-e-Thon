@@ -7,6 +7,7 @@
 | [API reference](openapi.yaml) | Every built endpoint with request and response schemas, plus notes for the UI team | OpenAPI 3.1 |
 | [API plan](api.md) | Conventions, the full planned endpoint catalogue, contract for the exam page | REST conventions |
 | [Security](security.md) | Assets, trust boundaries, threat model, control mapping, privacy, known gaps | STRIDE, OWASP Top 10 (2021) |
+| [Read performance](performance.md) | Measured read times at volume, what was changed and why, rules for new modules | Measure, explain, fix, re-measure |
 | [Testing](testing.md) | Test levels, how the end-to-end run works, required cases per module, CI | Test strategy |
 | [Decision records](adr/README.md) | Why each significant choice was made | Architecture Decision Records |
 

@@ -21,7 +21,14 @@ export const listAuditLogsSchema = z
     entityId: identifier.optional(),
     from: instant.optional(),
     to: instant.optional(),
-    page: z.coerce.number().int().min(1).default(1),
+    // Opaque position returned as meta.nextCursor by the previous page.
+    cursor: z.string().min(1).max(200).optional(),
+    // Counting every matching entry is the slowest part of a read on a large
+    // log, so the total is returned only when asked for.
+    withTotal: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .default(false),
     pageSize: z.coerce.number().int().min(1).max(100).default(20),
   })
   .refine((value) => !value.from || !value.to || value.from <= value.to, {

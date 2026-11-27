@@ -13,6 +13,14 @@ export function page<T>(data: T[], meta: PageMeta): Response {
   return Response.json({ data, meta });
 }
 
+// For lists that can grow without bound. A cursor points just past the last
+// item returned, so reading page 5,000 costs the same as reading page 1.
+export type CursorMeta = { pageSize: number; nextCursor: string | null; total?: number };
+
+export function cursorPage<T>(data: T[], meta: CursorMeta): Response {
+  return Response.json({ data, meta });
+}
+
 export function noContent(): Response {
   return new Response(null, { status: 204 });
 }

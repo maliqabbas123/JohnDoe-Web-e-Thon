@@ -21,6 +21,12 @@ export async function consumeRateLimit(key: string, { limit, windowSeconds }: Li
     RETURNING "count", EXTRACT(EPOCH FROM ("resetAt" - now()))::double precision AS "retryAfter"
   `;
 
+  // Roughly one call in fifty also removes counters whose window ended over
+  // an hour ago, so the table does not grow with every address ever seen.
+  if (Math.random() < 0.02) {
+    await db.$executeRaw`DELETE FROM "RateLimit" WHERE "resetAt" < now() - interval '1 hour'`;
+  }
+
   const state = rows[0];
   if (state && state.count > limit) {
     throw errors.rateLimited(state.retryAfter);

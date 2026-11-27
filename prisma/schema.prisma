@@ -49,6 +49,11 @@ model User {
   auditLogs         AuditLog[]
 
   @@index([role])
+  // Newest-first listing without a sort step.
+  @@index([createdAt(sort: Desc), id])
+  // Name and email search is deliberately not indexed: trigram indexes were
+  // measured and the planner does not choose them below roughly half a
+  // million users, while they slow every sign-up. See docs/performance.md.
 }
 
 // Server-side session. Only a SHA-256 hash of the cookie token is stored,
@@ -673,6 +678,10 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([actorId, createdAt])
+  // Newest-first reading and cursor paging.
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  // "This action, newest first" and "this action in the last 24 hours".
+  @@index([action, createdAt(sort: Desc)])
 }
 
 // Fixed-window counters for rate limiting. Kept in the database so limits

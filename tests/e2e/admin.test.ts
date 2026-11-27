@@ -150,7 +150,7 @@ describe("audit log", () => {
 
   it("filters by action, ignoring letter case", async () => {
     await new Client().post("/auth/login", { email: tempEmail("fail"), password: "wrong" });
-    const response = await admin.get("/admin/audit-logs?action=login_failed&pageSize=100");
+    const response = await admin.get("/admin/audit-logs?action=login_failed&pageSize=100&withTotal=true");
     assert.ok(response.body.data.length >= 1);
     assert.ok(response.body.data.every((entry: { action: string }) => entry.action === "LOGIN_FAILED"));
     assert.equal(response.body.meta.total, await count(`SELECT count(*) FROM "AuditLog" WHERE action = 'LOGIN_FAILED'`));
@@ -172,22 +172,115 @@ describe("audit log", () => {
 
   it("filters by time range, with either bound open", async () => {
     const total = await count('SELECT count(*) FROM "AuditLog"');
-    const future = await admin.get("/admin/audit-logs?from=2099-01-01T00:00:00Z");
+    const future = await admin.get("/admin/audit-logs?from=2099-01-01T00:00:00Z&withTotal=true");
     assert.equal(future.body.meta.total, 0);
 
-    const past = await admin.get("/admin/audit-logs?to=2000-01-01T00:00:00Z");
+    const past = await admin.get("/admin/audit-logs?to=2000-01-01T00:00:00Z&withTotal=true");
     assert.equal(past.body.meta.total, 0);
 
-    const all = await admin.get(`/admin/audit-logs?from=2000-01-01T00:00:00%2B05:00&to=2099-01-01T00:00:00Z`);
+    const all = await admin.get(`/admin/audit-logs?from=2000-01-01T00:00:00%2B05:00&to=2099-01-01T00:00:00Z&withTotal=true`);
     assert.ok(all.body.meta.total >= total);
   });
 
-  it("pages without overlap", async () => {
-    const first = await admin.get("/admin/audit-logs?pageSize=3&page=1");
-    const second = await admin.get("/admin/audit-logs?pageSize=3&page=2");
-    const ids = [...first.body.data, ...second.body.data].map((entry: { id: string }) => entry.id);
-    assert.equal(ids.length, 6);
-    assert.equal(new Set(ids).size, 6);
+  // Seven entries for one made-up record, so paging can be checked exactly.
+  async function seedEntries(count: number, sameInstant = false): Promise<string> {
+    const entityId = `e2e-paging-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    for (let index = 0; index < count; index++) {
+      await sql(
+        `INSERT INTO "AuditLog" (id, action, "entityType", "entityId", "createdAt")
+         VALUES ($1, 'LOGOUT', 'Paging', $2, $3::timestamptz - ($4 || ' seconds')::interval)`,
+        [`${entityId}-${index}`, entityId, "2026-01-01T00:00:00Z", sameInstant ? 0 : index],
+      );
+    }
+    return entityId;
+  }
+
+  async function readAll(query: string, pageSize: number) {
+    const ids: string[] = [];
+    const pages: { total?: number; nextCursor: string | null }[] = [];
+    let cursor: string | null = null;
+    do {
+      const url: string = `/admin/audit-logs?${query}&pageSize=${pageSize}${cursor ? `&cursor=${cursor}` : ""}`;
+      const response = await admin.get(url);
+      assert.equal(response.status, 200);
+      assert.ok(response.body.data.length <= pageSize);
+      ids.push(...response.body.data.map((entry: { id: string }) => entry.id));
+      pages.push(response.body.meta);
+      cursor = response.body.meta.nextCursor;
+    } while (cursor);
+    return { ids, pages };
+  }
+
+  it("pages by cursor: every entry exactly once, in order, then stops", async () => {
+    const entityId = await seedEntries(7);
+    const { ids, pages } = await readAll(`entityId=${entityId}`, 3);
+    assert.deepEqual(ids, [0, 1, 2, 3, 4, 5, 6].map((index) => `${entityId}-${index}`));
+    assert.equal(pages.length, 3);
+    assert.equal(pages.at(-1)!.nextCursor, null);
+  });
+
+  it("reports the total only when asked, and only on the first page", async () => {
+    const entityId = await seedEntries(5);
+    const counted = await readAll(`entityId=${entityId}&withTotal=true`, 2);
+    assert.equal(counted.pages[0].total, 5);
+    assert.ok(counted.pages.slice(1).every((meta) => meta.total === undefined));
+
+    const plain = await readAll(`entityId=${entityId}`, 2);
+    assert.ok(plain.pages.every((meta) => meta.total === undefined));
+    assert.deepEqual(plain.ids, counted.ids);
+  });
+
+  it("returns no cursor when everything fits on one page, including an exact fit", async () => {
+    const entityId = await seedEntries(4);
+    for (const pageSize of [4, 10]) {
+      const response = await admin.get(`/admin/audit-logs?entityId=${entityId}&pageSize=${pageSize}`);
+      assert.equal(response.body.data.length, 4);
+      assert.equal(response.body.meta.nextCursor, null, `pageSize ${pageSize}`);
+    }
+  });
+
+  it("pages correctly through entries that share one timestamp", async () => {
+    const entityId = await seedEntries(5, true);
+    const { ids } = await readAll(`entityId=${entityId}`, 2);
+    assert.equal(ids.length, 5);
+    assert.equal(new Set(ids).size, 5);
+  });
+
+  it("is not disturbed by entries written while paging", async () => {
+    const first = await admin.get("/admin/audit-logs?pageSize=3");
+    // New activity arrives at the top of the log.
+    await new Client().post("/auth/login", { email: tempEmail("during-paging"), password: "wrong" });
+    await new Client().post("/auth/login", { email: tempEmail("during-paging"), password: "wrong" });
+    const second = await admin.get(`/admin/audit-logs?pageSize=3&cursor=${first.body.meta.nextCursor}`);
+
+    const firstIds = first.body.data.map((entry: { id: string }) => entry.id);
+    const secondIds = second.body.data.map((entry: { id: string }) => entry.id);
+    assert.equal(secondIds.filter((id: string) => firstIds.includes(id)).length, 0, "no entry repeats");
+    assert.ok(second.body.data[0].createdAt <= first.body.data.at(-1).createdAt, "continues where the first page ended");
+  });
+
+  it("rejects a cursor it did not issue", async () => {
+    const forged = [
+      "not-a-cursor",
+      Buffer.from("{}").toString("base64url"),
+      Buffer.from(JSON.stringify(["not-a-date", "id"])).toString("base64url"),
+      Buffer.from(JSON.stringify(["2026-01-01T00:00:00Z", 42])).toString("base64url"),
+      Buffer.from(JSON.stringify(["2026-01-01T00:00:00Z", "a".repeat(100)])).toString("base64url"),
+      Buffer.from(JSON.stringify(["2026-01-01T00:00:00Z", "'; DROP TABLE \"AuditLog\"; --"])).toString("base64url").padEnd(250, "A"),
+    ];
+    for (const cursor of forged) {
+      const response = await admin.get(`/admin/audit-logs?cursor=${cursor}`);
+      assert.equal(response.status, 422, cursor.slice(0, 40));
+    }
+  });
+
+  it("treats a well-formed but made-up cursor as a plain position", async () => {
+    const before = await count('SELECT count(*) FROM "AuditLog"');
+    const cursor = Buffer.from(JSON.stringify(["1999-01-01T00:00:00.000Z", "'; DROP TABLE x; --"])).toString("base64url");
+    const response = await admin.get(`/admin/audit-logs?cursor=${cursor}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.data, []);
+    assert.ok((await count('SELECT count(*) FROM "AuditLog"')) >= before);
   });
 
   it("rejects invalid filters", async () => {
@@ -198,7 +291,7 @@ describe("audit log", () => {
       "from=2026-11-27T10:00:00Z&to=2026-11-27T09:00:00Z", // ends before it starts
       "pageSize=1000",
       "pageSize=0",
-      "page=0",
+      "withTotal=yes",
       `action=${encodeURIComponent("LOGIN' OR 1=1")}`,
       `actorId=${"a".repeat(65)}`,
     ];
