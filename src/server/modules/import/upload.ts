@@ -1,7 +1,7 @@
 import { errors } from "@/server/http/errors";
 import { MAX_IMPORT_BYTES } from "./schemas";
 
-export async function readQuestionImport(request: Request): Promise<{ format: "csv" | "json"; text: string }> {
+export async function readImportUpload(request: Request): Promise<{ format: "csv" | "json"; text: string }> {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
   const format = contentType === "text/csv" ? "csv" : contentType === "application/json" ? "json" : null;
   if (!format) throw errors.badRequest("Use Content-Type text/csv or application/json.");

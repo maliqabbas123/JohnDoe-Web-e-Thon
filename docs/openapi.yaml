@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.14.0
+  version: 0.15.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -979,13 +979,99 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /import/candidates:
+    post:
+      tags: [Enrolment]
+      operationId: importCandidates
+      summary: Import and enrol candidates in an owned exam
+      description: |
+        Examiner only, for an exam they own. Valid rows are enrolled in the
+        exam. Existing active candidates keep their name and password.
+        Already-enrolled candidates count as successful rows.
+
+        **UI notes:** Send a UTF-8 CSV or JSON file as the body. JSON is an
+        array of objects with email and name. CSV uses the exact header
+        email,name and starts data at row 2. See the
+        [example file](examples/candidate-import.csv). Select the target exam
+        and pass its ID as examId. The file can hold up to 50 rows and
+        512 KiB. The rate limit is three uploads per examiner per 60 seconds.
+
+        On 201, show the job counts and display initialCredentials once.
+        Each new account has a generated first password for private delivery
+        to its candidate. Clear the credentials when the view closes and keep
+        them out of client storage and logs. Retried imports and job history
+        omit previously issued passwords. If a password is lost, an
+        administrator can reset it through the existing account workflow.
+        On 429 follow Retry-After.
+      parameters:
+        - name: examId
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - name: fileName
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 50
+              items:
+                type: object
+                additionalProperties: false
+                required: [email, name]
+                properties:
+                  email: { $ref: "#/components/schemas/Email" }
+                  name: { $ref: "#/components/schemas/Name" }
+            example:
+              - { email: candidate.one@example.test, name: Candidate One }
+          text/csv:
+            schema: { type: string }
+            example: |
+              email,name
+              candidate.one@example.test,Candidate One
+              candidate.two@example.test,"Surname, Given"
+      responses:
+        "201":
+          description: The import outcome and first passwords for accounts created by this upload.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [job, initialCredentials]
+                    properties:
+                      job: { $ref: "#/components/schemas/ImportJob" }
+                      initialCredentials:
+                        type: array
+                        items:
+                          type: object
+                          required: [row, email, password]
+                          properties:
+                            row: { type: integer, minimum: 1 }
+                            email: { $ref: "#/components/schemas/Email" }
+                            password: { type: string, format: password }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /import/jobs:
     get:
       tags: [Question bank]
       operationId: listImportJobs
       summary: List your past imports
       description: |
-        Examiner only. Returns only your import jobs, newest first.
+        Examiner only. Returns your import jobs, newest first. Candidate jobs include the target exam ID.
 
         **UI notes:** Display each job's counts and expand its `errors` list
         for per-row feedback. Request the next page using only the
@@ -3001,6 +3087,9 @@ components:
       properties:
         id: { type: string }
         kind: { type: string, enum: [QUESTIONS, CANDIDATES] }
+        examId:
+          type: [string, "null"]
+          description: The target exam for a candidate import. Null if that exam was deleted.
         fileName: { type: string }
         totalRows: { type: integer, minimum: 1 }
         successCount: { type: integer, minimum: 0 }

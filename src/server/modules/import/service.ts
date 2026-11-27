@@ -6,7 +6,7 @@ import { questionCreateData } from "@/server/modules/questions/service";
 import type { ImportRowError, QuestionImportRow } from "./rows";
 import type { ImportJobsQuery } from "./schemas";
 
-const jobView = {
+export const jobView = {
   id: true,
   kind: true,
   fileName: true,
@@ -86,9 +86,11 @@ export async function listImportJobs(examiner: SessionUser, { cursor, pageSize }
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: pageSize + 1,
-    select: jobView,
+    select: { ...jobView, examId: true },
   });
-  const items = rows.slice(0, pageSize);
+  const items = rows.slice(0, pageSize).map(({ examId, ...job }) =>
+    job.kind === "CANDIDATES" ? { ...job, examId } : job,
+  );
   const last = items[items.length - 1];
   const nextCursor = rows.length > pageSize
     ? Buffer.from(JSON.stringify([last.createdAt.toISOString(), last.id])).toString("base64url")
