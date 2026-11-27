@@ -44,11 +44,11 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Built |
 | Spoofing | A session believed to be compromised | An administrator can end all of a user's sessions at once | Built |
 | Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Built (previous session ended); incident record Planned |
-| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Planned |
+| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Built for manual grades; planned for answer saves and disputes |
 | Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |
 | Tampering | Changing the device clock to gain time | Deadline fixed at start and compared with the server clock | Planned |
 | Tampering | Injection through input | Parameterised queries only; schema validation on every input; search terms treated as literal text; NUL characters and malformed ids refused before any query | Built for auth and users; per module after that |
-| Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in and user changes; Planned for grading and disputes |
+| Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in, user changes and grading; planned for disputes |
 | Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
 | Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
@@ -59,7 +59,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
 | Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management; per module after that |
-| Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Planned |
+| Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Built for grading; planned for other exam modules |
 | Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
 
 ## 4. OWASP Top 10 (2021) mapping

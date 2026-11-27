@@ -83,6 +83,7 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Question bank (topics and questions) | Built |
 | Shared paper and scoring rules | Built |
 | Question import (CSV and JSON) | Built |
-| Exams, enrolment, attempts, monitoring, grading, results, reports, candidate import, disputes, integrity | Designed, not built |
+| Grading | Built |
+| Exams, enrolment, attempts, monitoring, results, reports, candidate import, disputes, integrity | Designed, not built |
 
 The innovation challenge write-up is added with the modules that implement it.
