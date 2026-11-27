@@ -1,5 +1,8 @@
 'use client'
 
+import { isLive } from '@/lib/api'
+import { LiveExamDirectory } from './LiveExamDirectory'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -20,7 +23,7 @@ import {
 
 import { ep, pending, sandbox, statuses } from './shared'
 
-export function ExaminerDashboardPage() {
+function DemoExaminerDashboardPage() {
   const { state, user, update } = useStore(),
     router = useRouter(),
     exams = state.exams.filter((e) => e.owner === user?.id)
@@ -122,4 +125,8 @@ export function ExaminerDashboardPage() {
       </Panel>
     </>
   )
+}
+
+export function ExaminerDashboardPage() {
+  return isLive ? <LiveExamDirectory /> : <DemoExaminerDashboardPage />
 }
