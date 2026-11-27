@@ -1,0 +1,684 @@
+// Data model for the Secure Examination Management System.
+// docs/data-model.md explains every table; docs/adr/ records the decisions.
+// All timestamps are stored in UTC (timestamptz).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Identity and access ─────────────────────────
+
+enum Role {
+  ADMIN
+  EXAMINER
+  CANDIDATE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(CANDIDATE)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions          Session[]
+  preference        UserPreference?
+  topics            Topic[]
+  questions         Question[]
+  exams             Exam[]
+  enrollments       Enrollment[]      @relation("EnrollmentCandidate")
+  enrollmentsBy     Enrollment[]      @relation("EnrollmentCreator")
+  retakeGrants      RetakeGrant[]
+  attempts          Attempt[]         @relation("AttemptOwner")
+  integrityReviews  Attempt[]         @relation("AttemptIntegrityReviewer")
+  gradedAnswers     AttemptQuestion[]
+  gradeChanges      GradeChange[]
+  announcements     Announcement[]
+  disputesRaised    Dispute[]         @relation("DisputeRaiser")
+  disputesResolved  Dispute[]         @relation("DisputeResolver")
+  reportsIssued     Report[]
+  importJobs        ImportJob[]
+  auditLogs         AuditLog[]
+
+  @@index([role])
+}
+
+// Server-side session. Only a SHA-256 hash of the cookie token is stored,
+// so a database leak does not yield usable session tokens.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime  @db.Timestamptz(3)
+  lastSeenAt DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt  DateTime? @db.Timestamptz(3)
+  ip         String?
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Candidate workspace settings (layout, font size, theme) kept across devices.
+model UserPreference {
+  userId    String   @id
+  workspace Json     @default("{}")
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────── Question bank ─────────────────────────
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_SELECT
+  WRITTEN
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  questions Question[]
+
+  @@unique([ownerId, name])
+}
+
+// Reusable across the owner's exams. Difficulty is a required label set by
+// the examiner when writing or importing the question.
+model Question {
+  id           String       @id @default(cuid())
+  ownerId      String
+  topicId      String
+  type         QuestionType
+  difficulty   Difficulty
+  text         String
+  explanation  String?
+  defaultMarks Decimal      @db.Decimal(7, 2)
+  // Questions used by an exam or attempt are archived, never deleted.
+  isArchived   Boolean      @default(false)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(3)
+
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  topic            Topic             @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  options          QuestionOption[]
+  examQuestions    ExamQuestion[]
+  attemptQuestions AttemptQuestion[]
+
+  @@index([ownerId, topicId, difficulty])
+}
+
+model QuestionOption {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String
+  isCorrect  Boolean @default(false)
+  position   Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+}
+
+// ───────────────────────── Examinations ─────────────────────────
+
+// Stored lifecycle. "Ongoing" is not stored: an exam is ongoing when it is
+// PUBLISHED and the server clock is inside [startsAt, endsAt]. With retake
+// slots, "ongoing" also differs per candidate, so it is computed per request.
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  COMPLETED
+}
+
+// FIXED: every candidate gets every question in the pool.
+// BALANCED: each attempt gets its own random draw with the same number of
+// easy, medium and hard questions, so papers differ but are equally hard.
+enum SelectionMode {
+  FIXED
+  BALANCED
+}
+
+enum MultiSelectScoring {
+  ALL_OR_NOTHING
+  PARTIAL
+}
+
+// Which attempt is a candidate's result when several are allowed.
+enum ResultPolicy {
+  BEST
+  LATEST
+}
+
+model Exam {
+  id              String     @id @default(cuid())
+  ownerId         String
+  title           String
+  instructions    String     @default("")
+  // One slot for every enrolled candidate.
+  startsAt        DateTime   @db.Timestamptz(3)
+  endsAt          DateTime   @db.Timestamptz(3)
+  durationMinutes Int
+  totalMarks      Decimal    @db.Decimal(7, 2)
+  status          ExamStatus @default(DRAFT)
+
+  // Paper construction
+  selectionMode      SelectionMode      @default(FIXED)
+  // BALANCED mode: questions per paper. Split by ExamDifficultyRule.
+  questionCount      Int?
+  shuffleQuestions   Boolean            @default(false)
+  shuffleOptions     Boolean            @default(false)
+  multiSelectScoring MultiSelectScoring @default(ALL_OR_NOTHING)
+
+  // Attempts and results
+  // Null means unlimited. The examiner may change it at any time.
+  maxAttempts        Int?         @default(1)
+  resultPolicy       ResultPolicy @default(BEST)
+  // Hours after a result is released during which it can be disputed.
+  // Null disables disputes for the exam.
+  disputeWindowHours Int?         @default(72)
+  revealAnswers      Boolean      @default(false)
+
+  // Integrity switches. The exam page enforces them; the server records and
+  // analyses. Every active switch is listed in the rules shown to candidates.
+  desktopOnly        Boolean @default(true)
+  blockClipboard     Boolean @default(true)
+  blockContextMenu   Boolean @default(true)
+  requireFullscreen  Boolean @default(false)
+  detectExtraDisplay Boolean @default(true)
+  watermark          Boolean @default(true)
+  aiNotice           Boolean @default(true)
+  honeypot           Boolean @default(true)
+
+  publishedAt        DateTime? @db.Timestamptz(3)
+  completedAt        DateTime? @db.Timestamptz(3)
+  // First time results were released.
+  resultsPublishedAt DateTime? @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+
+  owner           User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  questions       ExamQuestion[]
+  difficultyRules ExamDifficultyRule[]
+  enrollments     Enrollment[]
+  attempts        Attempt[]
+  announcements   Announcement[]
+  importJobs      ImportJob[]
+
+  @@index([ownerId, status])
+  @@index([status, startsAt, endsAt])
+}
+
+// The exam's question pool.
+model ExamQuestion {
+  id         String   @id @default(cuid())
+  examId     String
+  questionId String
+  // FIXED mode: marks for this question. BALANCED mode: null, because marks
+  // come from the difficulty rule so every paper has the same total.
+  marks      Decimal? @db.Decimal(7, 2)
+  position   Int
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, questionId])
+  @@index([examId, position])
+}
+
+// BALANCED mode: the share of each difficulty in every paper and what a
+// question of that difficulty is worth. Percentages for an exam sum to 100.
+model ExamDifficultyRule {
+  id         String     @id @default(cuid())
+  examId     String
+  difficulty Difficulty
+  percent    Int
+  marksEach  Decimal    @db.Decimal(7, 2)
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, difficulty])
+}
+
+// A candidate sees an exam only if enrolled in it.
+model Enrollment {
+  id           String   @id @default(cuid())
+  examId       String
+  candidateId  String
+  enrolledById String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  exam         Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidate    User          @relation("EnrollmentCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+  enrolledBy   User          @relation("EnrollmentCreator", fields: [enrolledById], references: [id], onDelete: Restrict)
+  retakeGrants RetakeGrant[]
+
+  @@unique([examId, candidateId])
+  @@index([candidateId])
+}
+
+// An extra slot for one candidate, issued by the examiner. A new row per
+// grant, so the history of slots is kept. The composite foreign key means a
+// grant can only exist for an enrolled candidate.
+model RetakeGrant {
+  id              String    @id @default(cuid())
+  examId          String
+  candidateId     String
+  startsAt        DateTime  @db.Timestamptz(3)
+  endsAt          DateTime  @db.Timestamptz(3)
+  attemptsAllowed Int       @default(1)
+  reason          String
+  // Set when the grant is the outcome of a dispute.
+  disputeId       String?   @unique
+  grantedById     String
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt       DateTime? @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [examId, candidateId], references: [examId, candidateId], onDelete: Cascade)
+  grantedBy  User       @relation(fields: [grantedById], references: [id], onDelete: Restrict)
+  dispute    Dispute?   @relation(fields: [disputeId], references: [id], onDelete: SetNull)
+  attempts   Attempt[]
+
+  @@index([examId, candidateId])
+}
+
+// ───────────────────────── Attempts and answers ─────────────────────────
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED // candidate submitted before the deadline
+  EXPIRED   // closed by the server at the deadline with the last saved state
+}
+
+// Whether the exam page is in contact with the server. Stored so the
+// monitoring view and the disruption record agree.
+enum ConnectionState {
+  ONLINE
+  INTERRUPTED
+}
+
+enum GradingStatus {
+  PENDING      // not finalised yet
+  NEEDS_REVIEW // objective answers graded, written answers waiting
+  GRADED       // every answer has a score
+}
+
+model Attempt {
+  id            String          @id @default(cuid())
+  examId        String
+  userId        String
+  // 1, 2, 3 ... per candidate per exam. Earlier attempts are never removed.
+  attemptNumber Int
+  // The retake slot this attempt was taken in; null for the main slot.
+  retakeGrantId String?
+  // Examiner preview. Excluded from results, statistics and reports.
+  isSandbox     Boolean         @default(false)
+  status        AttemptStatus   @default(IN_PROGRESS)
+  connection    ConnectionState @default(ONLINE)
+  gradingStatus GradingStatus   @default(PENDING)
+
+  startedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  // Fixed at start: min(startedAt + duration, slot end). Never moved.
+  // Compared against the server clock only.
+  deadlineAt      DateTime  @db.Timestamptz(3)
+  submittedAt     DateTime? @db.Timestamptz(3)
+  lastSeenAt      DateTime  @default(now()) @db.Timestamptz(3)
+  // The candidate accepted the exam rules before starting.
+  rulesAcceptedAt DateTime  @db.Timestamptz(3)
+
+  // Question on screen and when the server delivered it. Used to resume on
+  // the same question and to measure time per question on the server.
+  currentPosition Int       @default(1)
+  currentOpenedAt DateTime? @db.Timestamptz(3)
+
+  score            Decimal?  @db.Decimal(7, 2)
+  maxScore         Decimal   @db.Decimal(7, 2)
+  // Set when the examiner releases this attempt's result. The dispute
+  // window runs from here.
+  resultReleasedAt DateTime? @db.Timestamptz(3)
+
+  // Unique word hidden in this attempt's questions as an AI honeypot.
+  honeypotMarker String?
+  scratchpad     String  @default("")
+  ip             String?
+  userAgent      String?
+
+  // Examiner's review of the integrity signals for this attempt.
+  integrityReviewNote String?
+  integrityReviewedById String?
+  integrityReviewedAt DateTime? @db.Timestamptz(3)
+
+  exam                Exam              @relation(fields: [examId], references: [id], onDelete: Restrict)
+  user                User              @relation("AttemptOwner", fields: [userId], references: [id], onDelete: Restrict)
+  retakeGrant         RetakeGrant?      @relation(fields: [retakeGrantId], references: [id], onDelete: SetNull)
+  integrityReviewedBy User?             @relation("AttemptIntegrityReviewer", fields: [integrityReviewedById], references: [id], onDelete: SetNull)
+  questions           AttemptQuestion[]
+  disruptions         Disruption[]
+  incidents           Incident[]
+  disputes            Dispute[]
+  reports             Report[]
+
+  @@unique([examId, userId, attemptNumber])
+  // A partial unique index in the migration also guarantees at most one
+  // IN_PROGRESS attempt per candidate per exam.
+  @@index([examId, status])
+  @@index([status, deadlineAt])
+}
+
+// One row per question served in an attempt: the frozen paper and the answer.
+model AttemptQuestion {
+  id                String   @id @default(cuid())
+  attemptId         String
+  questionId        String
+  position          Int
+  marks             Decimal  @db.Decimal(7, 2)
+  // Frozen copy of the question, its options and the accepted answers taken
+  // when the attempt started. Later edits to the bank cannot change a paper.
+  snapshot          Json
+  // Option ids in the order shown to this candidate.
+  optionOrder       String[]
+  selectedOptionIds String[]
+  writtenAnswer     String?
+  flagged           Boolean  @default(false)
+  // Client-supplied counter; a save with an older revision is ignored,
+  // which makes autosave retries and out-of-order requests safe.
+  revision          Int      @default(0)
+  savedAt           DateTime? @db.Timestamptz(3)
+
+  // Measured by the server from question delivery times.
+  firstOpenedAt    DateTime? @db.Timestamptz(3)
+  openCount        Int       @default(0)
+  timeSpentSeconds Int       @default(0)
+  // Typing counts reported by the exam page. Counts only, never the keys.
+  keystrokeCount   Int       @default(0)
+  pasteCount       Int       @default(0)
+
+  autoScore   Decimal?  @db.Decimal(7, 2)
+  manualScore Decimal?  @db.Decimal(7, 2)
+  feedback    String?
+  gradedById  String?
+  gradedAt    DateTime? @db.Timestamptz(3)
+
+  attempt      Attempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question     Question      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  gradedBy     User?         @relation(fields: [gradedById], references: [id], onDelete: SetNull)
+  gradeChanges GradeChange[]
+  incidents    Incident[]
+  disputeItem  DisputeItem?
+
+  @@unique([attemptId, questionId])
+  @@unique([attemptId, position])
+  @@index([questionId])
+}
+
+// History of every change to a score after it was first given. A published
+// score is never edited without a row here.
+model GradeChange {
+  id                String   @id @default(cuid())
+  attemptQuestionId String
+  previousScore     Decimal? @db.Decimal(7, 2)
+  newScore          Decimal  @db.Decimal(7, 2)
+  reason            String
+  disputeItemId     String?
+  changedById       String
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  attemptQuestion AttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+  disputeItem     DisputeItem?    @relation(fields: [disputeItemId], references: [id], onDelete: SetNull)
+  changedBy       User            @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([attemptQuestionId, createdAt])
+}
+
+// ───────────────────────── Monitoring and integrity ─────────────────────────
+
+// A period with no contact from the exam page, measured on the server clock.
+// Evidence for the examiner; it never changes the deadline.
+model Disruption {
+  id        String    @id @default(cuid())
+  attemptId String
+  startedAt DateTime  @db.Timestamptz(3)
+  endedAt   DateTime? @db.Timestamptz(3)
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId, startedAt])
+}
+
+enum IncidentType {
+  // Reported by the exam page
+  TAB_HIDDEN
+  FOCUS_LOST
+  FULLSCREEN_EXIT
+  COPY_ATTEMPT
+  PASTE_ATTEMPT
+  CONTEXT_MENU
+  DEVTOOLS_SHORTCUT
+  PRINT_SCREEN
+  EXTRA_DISPLAY
+  // Detected by the server
+  CONCURRENT_SESSION
+  NETWORK_CHANGE
+  FAST_CORRECT_ANSWER
+  PASTE_BYPASS
+  SIMILAR_ANSWER
+  HONEYPOT_TRIGGERED
+  OTHER
+}
+
+enum IncidentSource {
+  CLIENT
+  SERVER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// A signal for an examiner to review, never proof of misconduct.
+model Incident {
+  id                String         @id @default(cuid())
+  attemptId         String
+  attemptQuestionId String?
+  type              IncidentType
+  source            IncidentSource
+  severity          Severity       @default(LOW)
+  details           Json?
+  // Server receive time. Client timestamps are kept in details only.
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+
+  attempt         Attempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attemptQuestion AttemptQuestion? @relation(fields: [attemptQuestionId], references: [id], onDelete: SetNull)
+
+  @@index([attemptId, createdAt])
+  @@index([attemptId, severity])
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  examId    String
+  authorId  String
+  message   String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  exam   Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([examId, createdAt])
+}
+
+// ───────────────────────── Disputes ─────────────────────────
+
+enum DisputeCategory {
+  GRADING_ERROR
+  FAULTY_QUESTION
+  TECHNICAL_INCIDENT
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+}
+
+enum DisputeDecision {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// Raised by a candidate on their own released result, inside the exam's
+// dispute window. Decided by the exam's examiner alone.
+model Dispute {
+  id           String          @id @default(cuid())
+  attemptId    String
+  raisedById   String
+  category     DisputeCategory
+  explanation  String
+  status       DisputeStatus   @default(OPEN)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  resolvedAt   DateTime?       @db.Timestamptz(3)
+  resolvedById String?
+
+  attempt     Attempt            @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  raisedBy    User               @relation("DisputeRaiser", fields: [raisedById], references: [id], onDelete: Restrict)
+  resolvedBy  User?              @relation("DisputeResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  items       DisputeItem[]
+  attachment  DisputeAttachment?
+  retakeGrant RetakeGrant?
+
+  @@index([attemptId])
+  @@index([status, createdAt])
+}
+
+// One row per disputed question, each with its own decision. A row with no
+// question covers the whole attempt (technical incident). A question can be
+// disputed once.
+model DisputeItem {
+  id                String          @id @default(cuid())
+  disputeId         String
+  attemptQuestionId String?         @unique
+  candidateNote     String?
+  decision          DisputeDecision @default(PENDING)
+  decisionReason    String?
+  decidedAt         DateTime?       @db.Timestamptz(3)
+
+  dispute         Dispute          @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  attemptQuestion AttemptQuestion? @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+  gradeChanges    GradeChange[]
+
+  @@index([disputeId])
+}
+
+// Optional supporting document. PDF, PNG or JPEG up to 4 MB, checked by
+// content. Readable only by the candidate and the exam's examiner.
+model DisputeAttachment {
+  id        String   @id @default(cuid())
+  disputeId String   @unique
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  sha256    String
+  data      Bytes
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────── Reports ─────────────────────────
+
+// An issued result report. The verification code is random and unguessable;
+// the public verification endpoint reveals only what is needed to confirm it.
+// When a score changes, the old report is superseded and a new one issued.
+model Report {
+  id               String    @id @default(cuid())
+  attemptId        String
+  verificationCode String    @unique
+  score            Decimal   @db.Decimal(7, 2)
+  maxScore         Decimal   @db.Decimal(7, 2)
+  contentHash      String
+  issuedById       String
+  issuedAt         DateTime  @default(now()) @db.Timestamptz(3)
+  supersededAt     DateTime? @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+
+  attempt  Attempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  issuedBy User    @relation(fields: [issuedById], references: [id], onDelete: Restrict)
+
+  @@index([attemptId, issuedAt])
+}
+
+// ───────────────────────── Operations ─────────────────────────
+
+enum ImportKind {
+  CANDIDATES
+  QUESTIONS
+}
+
+model ImportJob {
+  id           String     @id @default(cuid())
+  userId       String
+  kind         ImportKind
+  examId       String?
+  fileName     String
+  totalRows    Int
+  successCount Int
+  failureCount Int
+  // [{ row, field, message }]
+  errors       Json       @default("[]")
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  exam Exam? @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+// Append-only record of sensitive actions: logins, role changes, grade
+// changes, retake grants, dispute decisions, result release.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+}
+
+// Fixed-window counters for rate limiting. Kept in the database so limits
+// hold across serverless instances.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime @db.Timestamptz(3)
+}
