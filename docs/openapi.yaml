@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.11.0
+  version: 0.12.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -89,6 +89,8 @@ tags:
     description: Review and grade closed submissions for an examiner's own exam.
   - name: Exams
     description: Exam configuration and publication. Examiner only.
+  - name: Monitoring
+    description: Candidate contact and signals, and the exam owner's live view and announcements.
   - name: Workspace
     description: A candidate’s saved exam workspace settings.
   - name: Enrolment
@@ -1558,6 +1560,217 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /attempts/{id}/heartbeat:
+    post:
+      tags: [Monitoring]
+      operationId: sendHeartbeat
+      summary: Report contact and receive announcements
+      description: |
+        Candidate only, for their own non-sandbox attempt. A gap of more than
+        45 seconds is recorded as a disruption. The deadline stays fixed.
+
+        **UI notes:** Send every 15 seconds while the attempt is live. Use the
+        returned server time and fixed deadline for the countdown. Send the
+        last announcementCursor as cursor. If hasMoreAnnouncements is true,
+        fetch the next page immediately. Stop when status is SUBMITTED or
+        EXPIRED. EXPIRED is reported as soon as the deadline elapses.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+        - { $ref: "#/components/parameters/AnnouncementCursor" }
+      responses:
+        "200":
+          description: Current attempt timing and up to 20 announcements.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Heartbeat" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/incidents:
+    post:
+      tags: [Monitoring]
+      operationId: recordClientIncidents
+      summary: Report a batch of exam-page signals
+      description: |
+        Candidate only, for their own live non-sandbox attempt. The server
+        sets source to CLIENT, severity to LOW and records its receive time.
+
+        **UI notes:** Send only documented client events and their declared
+        details. Fullscreen, clipboard, context menu and extra-display events
+        require the corresponding switch. The whole batch is rejected if
+        any event is invalid. Send at most 20 events per request and 12
+        requests per candidate per 60 seconds. On 429 use Retry-After.
+        Stop sending when the attempt closes.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [incidents]
+              properties:
+                incidents:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: { $ref: "#/components/schemas/ClientIncident" }
+            example:
+              incidents:
+                - { type: TAB_HIDDEN, details: { awayMs: 1200 } }
+                - { type: COPY_ATTEMPT, details: { position: 3 } }
+      responses:
+        "201":
+          description: Number of events recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [accepted]
+                    properties:
+                      accepted: { type: integer, minimum: 1, maximum: 20 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The attempt has been submitted or its deadline has elapsed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /exams/{id}/monitor:
+    get:
+      tags: [Monitoring]
+      operationId: getExamMonitor
+      summary: Monitor attempts for your exam
+      description: |
+        Examiner only, own exam. Reports aggregate progress and signal counts
+        for non-sandbox attempts and records new contact gaps it observes.
+
+        **UI notes:** Poll every few seconds. Display attempt status before
+        connection state. A disruption is evidence of lost contact. Use
+        meta.nextCursor to load additional rows in attempt ID order.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200":
+          description: A page of attempts and the snapshot time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MonitoredAttempt" }
+                  meta:
+                    type: object
+                    required: [pageSize, nextCursor, serverTime]
+                    properties:
+                      pageSize: { type: integer, minimum: 1, maximum: 200 }
+                      nextCursor: { type: [string, "null"] }
+                      serverTime: { $ref: "#/components/schemas/Instant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/announcements:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Monitoring]
+      operationId: listExamAnnouncements
+      summary: List announcements for your exam
+      description: |
+        Examiner only, own exam.
+
+        **UI notes:** Messages are in delivery order. Send meta.nextCursor
+        as cursor for the next page. Render messages as plain text.
+      parameters:
+        - { $ref: "#/components/parameters/AnnouncementCursor" }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: A page of announcements.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ExamAnnouncement" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Monitoring]
+      operationId: sendExamAnnouncement
+      summary: Send an announcement to candidates in your exam
+      description: |
+        Examiner only, own exam.
+
+        **UI notes:** Send 1 to 1,000 characters of plain text. Candidates
+        receive the announcement through their next heartbeat for this exam.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              additionalProperties: false
+              properties:
+                message: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "201":
+          description: The announcement to display in the history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ExamAnnouncement" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /exams/{id}/grading:
     get:
       tags: [Grading]
@@ -1612,7 +1825,7 @@ paths:
         this response in candidate views. A live attempt returns `409`.
         Sandbox previews and attempts from other examiners return `404`.
       parameters:
-        - $ref: "#/components/parameters/GradingAttemptId"
+        - $ref: "#/components/parameters/AttemptId"
       responses:
         "200":
           description: Frozen paper, answers and latest grade.
@@ -1646,7 +1859,7 @@ paths:
         `409` means the attempt is still open. A `422` identifies an invalid
         position, non-written question, bad mark or missing reason.
       parameters:
-        - $ref: "#/components/parameters/GradingAttemptId"
+        - $ref: "#/components/parameters/AttemptId"
         - name: position
           in: path
           required: true
@@ -1743,7 +1956,12 @@ components:
       required: true
       description: The exam's id.
       schema: { type: string, maxLength: 64 }
-    GradingAttemptId:
+    AnnouncementCursor:
+      name: cursor
+      in: query
+      description: Opaque announcement position from the previous response.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    AttemptId:
       name: id
       in: path
       required: true
@@ -2354,6 +2572,104 @@ components:
       allOf:
         - { $ref: "#/components/schemas/WorkspacePreferencesInput" }
         - required: [theme, fontSize, lineSpacing, palettePosition]
+
+    ExamAnnouncement:
+      type: object
+      additionalProperties: false
+      required: [id, message, createdAt]
+      properties:
+        id: { type: string }
+        message: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+
+    MonitoredAttemptStatus:
+      type: string
+      enum: [IN_PROGRESS, SUBMITTED, EXPIRED]
+
+    Heartbeat:
+      type: object
+      additionalProperties: false
+      required: [serverTime, deadlineAt, status, announcements, announcementCursor, hasMoreAnnouncements]
+      properties:
+        serverTime: { $ref: "#/components/schemas/Instant" }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        status: { $ref: "#/components/schemas/MonitoredAttemptStatus" }
+        announcements:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ExamAnnouncement" }
+        announcementCursor: { type: [string, "null"] }
+        hasMoreAnnouncements: { type: boolean }
+
+    MonitoredAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, candidate, attemptNumber, status, connection, lastSeenAt, deadlineAt, currentPosition, questionCount, answeredCount, incidentCount, disruptionCount, latestDisruption]
+      properties:
+        id: { type: string }
+        candidate:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        attemptNumber: { type: integer }
+        status: { $ref: "#/components/schemas/MonitoredAttemptStatus" }
+        connection: { type: string, enum: [ONLINE, INTERRUPTED] }
+        lastSeenAt: { $ref: "#/components/schemas/Instant" }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        currentPosition: { type: integer }
+        questionCount: { type: integer }
+        answeredCount: { type: integer }
+        incidentCount: { type: integer }
+        disruptionCount: { type: integer }
+        latestDisruption:
+          type: [object, "null"]
+          required: [startedAt, endedAt]
+          properties:
+            startedAt: { $ref: "#/components/schemas/Instant" }
+            endedAt: { type: [string, "null"], format: date-time }
+
+    ClientIncident:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { type: string, enum: [TAB_HIDDEN, FOCUS_LOST] }
+            details:
+              type: object
+              additionalProperties: false
+              required: [awayMs]
+              properties:
+                awayMs: { type: integer, minimum: 0, maximum: 86400000 }
+        - type: object
+          additionalProperties: false
+          required: [type, details]
+          properties:
+            type: { type: string, enum: [COPY_ATTEMPT, PASTE_ATTEMPT] }
+            details:
+              type: object
+              additionalProperties: false
+              required: [position]
+              properties:
+                position: { type: integer, minimum: 1, maximum: 2147483647 }
+        - type: object
+          additionalProperties: false
+          required: [type, details]
+          properties:
+            type: { type: string, const: DEVTOOLS_SHORTCUT }
+            details:
+              type: object
+              additionalProperties: false
+              required: [key]
+              properties:
+                key: { type: string, enum: [F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Meta+Alt+I, Meta+Alt+J, Meta+Alt+C] }
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { type: string, enum: [FULLSCREEN_EXIT, CONTEXT_MENU, PRINT_SCREEN, EXTRA_DISPLAY] }
 
     UserActivity:
       type: object

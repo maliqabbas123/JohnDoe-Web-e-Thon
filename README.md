@@ -87,6 +87,7 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Exams (drafts, paper review, publication and join codes) | Built |
 | Candidate workspace preferences | Built |
 | Enrolment (rosters, joining by code and retake grants) | Built |
-| Attempts, monitoring, results, reports, candidate import, disputes, integrity | Designed, not built |
+| Examiner monitoring, disruptions and announcements | Built |
+| Attempts, results, reports, candidate import, disputes, integrity | Designed, not built |
 
-The innovation challenge write-up is added with the modules that implement it.
+**5.3 Disruption resilience.** Candidate heartbeats and examiner polling record contact gaps over 45 seconds. Candidates reconnect on the same fixed deadline. Examiners can see when contact was lost and restored.

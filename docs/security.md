@@ -52,10 +52,11 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
 | Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
 | Information disclosure | Reading another candidate’s workspace preferences | Both routes require the candidate role and use the signed-in user ID for the database lookup | Built |
+| Tampering | Forging server-detected incidents | Intake accepts only documented client event types and derives source, severity and receive time on the server | Built |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
-| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining and question import; Planned for autosave and candidate import |
-| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Requests over either limit receive 413 | Built |
+| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining, question import and incident intake. Planned for autosave and candidate import |
+| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Requests over a limit receive 413 | Built |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
