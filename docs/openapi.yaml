@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.16.0
+  version: 0.17.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -101,6 +101,8 @@ tags:
     description: Examiner result release and analytics, and candidate review of released results.
   - name: Attempts
     description: Candidate exam delivery, answers, submission and examiner previews.
+  - name: Disputes
+    description: Candidate disputes and examiner decisions on released results.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -2489,6 +2491,190 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /attempts/{id}/disputes:
+    post:
+      tags: [Disputes]
+      operationId: raiseDispute
+      summary: File a dispute for a released result
+      description: |
+        **UI notes:** Candidate only. Send positions for grading errors and faulty questions. A technical incident covers the whole attempt. Optional attachment bytes use standard base64 and are limited to 4 MiB decoded. A closed window or duplicate dispute returns 409.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RaiseDispute" }
+      responses:
+        "201":
+          description: File a dispute for a released result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Closed dispute window, duplicate dispute, or already decided item.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/disputes:
+    get:
+      tags: [Disputes]
+      operationId: listMyDisputes
+      summary: List my disputes and their decisions
+      description: |
+        **UI notes:** Candidate only. Use status to filter, and pass meta.nextCursor to fetch the next page.
+      parameters:
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, RESOLVED] }
+      responses:
+        "200":
+          description: List my disputes and their decisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Dispute" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/disputes:
+    get:
+      tags: [Disputes]
+      operationId: listExamDisputes
+      summary: List disputes for an owned exam
+      description: |
+        **UI notes:** Examiner only. Use status=OPEN for the decision queue and pass meta.nextCursor to fetch the next page.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, RESOLVED] }
+      responses:
+        "200":
+          description: List disputes for an owned exam.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Dispute" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /disputes/{id}:
+    get:
+      tags: [Disputes]
+      operationId: getExamDispute
+      summary: Read a dispute and its evidence
+      description: |
+        **UI notes:** Examiner only. Open the linked attempt review for question and answer content. Use the attachment route to download the evidence.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+      responses:
+        "200":
+          description: Read a dispute and its evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /disputes/{id}/items/{itemId}:
+    patch:
+      tags: [Disputes]
+      operationId: decideDisputeItem
+      summary: Decide an open dispute item
+      description: |
+        **UI notes:** Examiner only. Supply a reason. Regrade a grading error, correct or void a faulty question, or grant a retake for a technical incident. Rejection applies to every category. An already decided item returns 409.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecideDisputeItem" }
+      responses:
+        "200":
+          description: Decide an open dispute item.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Closed dispute window, duplicate dispute, or already decided item.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /disputes/{id}/attachment:
+    get:
+      tags: [Disputes]
+      operationId: getDisputeAttachment
+      summary: Download dispute evidence
+      description: |
+        **UI notes:** The author and exam owner can download evidence. The response carries the detected media type, Content-Disposition, and X-Content-Type-Options.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+      responses:
+        "200":
+          description: Download dispute evidence.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2538,6 +2724,11 @@ components:
       description: The question's id.
       schema: { type: string, maxLength: 64 }
 
+    DisputeId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, maxLength: 64 }
     ExamId:
       name: id
       in: path
@@ -3155,6 +3346,105 @@ components:
             id: { type: string }
             text: { type: string }
             count: { type: integer }
+
+    RaiseDispute:
+      type: object
+      additionalProperties: false
+      required: [category, explanation]
+      properties:
+        category: { type: string, enum: [GRADING_ERROR, FAULTY_QUESTION, TECHNICAL_INCIDENT] }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        positions: { type: array, maxItems: 200, uniqueItems: true, items: { type: integer, minimum: 1 } }
+        attachment:
+          type: object
+          additionalProperties: false
+          required: [fileName, contentBase64]
+          properties:
+            fileName: { type: string, minLength: 1, maxLength: 200 }
+            contentBase64: { type: string, contentEncoding: base64 }
+
+    DecideDisputeItem:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [action, reason]
+          properties:
+            action: { const: REJECT }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, score]
+          properties:
+            action: { const: REGRADE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            score: { type: number, minimum: 0, multipleOf: 0.01 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason]
+          properties:
+            action: { const: VOID_QUESTION }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, optionIds]
+          properties:
+            action: { const: ACCEPT_ALTERNATIVE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            optionIds: { type: array, minItems: 1, maxItems: 10, uniqueItems: true, items: { type: string } }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, startsAt, endsAt]
+          properties:
+            action: { const: GRANT_RETAKE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            startsAt: { type: string, format: date-time }
+            endsAt: { type: string, format: date-time }
+            attemptsAllowed: { type: integer, minimum: 1, maximum: 100, default: 1 }
+
+    Dispute:
+      type: object
+      required: [id, attemptId, category, status, explanation, createdAt, resolvedAt, exam, candidate, items, attachment, retakeGrant]
+      properties:
+        id: { type: string }
+        attemptId: { type: string }
+        category: { type: string, enum: [GRADING_ERROR, FAULTY_QUESTION, TECHNICAL_INCIDENT] }
+        status: { type: string, enum: [OPEN, RESOLVED] }
+        explanation: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        resolvedAt: { type: [string, "null"], format: date-time }
+        candidate: { $ref: "#/components/schemas/GradingCandidate" }
+        exam:
+          type: object
+          required: [id, title]
+          properties:
+            id: { type: string }
+            title: { type: string }
+        attachment:
+          type: [object, "null"]
+          required: [fileName, mimeType, sizeBytes]
+          properties:
+            fileName: { type: string }
+            mimeType: { type: string }
+            sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+        retakeGrant:
+          type: [object, "null"]
+          required: [id, startsAt, endsAt, attemptsAllowed]
+          properties:
+            id: { type: string }
+            startsAt: { $ref: "#/components/schemas/Instant" }
+            endsAt: { $ref: "#/components/schemas/Instant" }
+            attemptsAllowed: { type: integer, minimum: 1 }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, position, decision, decisionReason, decidedAt]
+            properties:
+              id: { type: string }
+              position: { type: [integer, "null"] }
+              decision: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+              decisionReason: { type: [string, "null"] }
+              decidedAt: { type: [string, "null"], format: date-time }
 
     QuestionType:
       type: string
@@ -4112,6 +4402,7 @@ components:
         - USER_SIGN_IN_UNLOCKED
         - ANSWER_GRADED
         - RESULT_RELEASED
+        - DISPUTE_DECIDED
         - EXAM_PUBLISHED
         - EXAM_UNPUBLISHED
         - EXAM_COMPLETED

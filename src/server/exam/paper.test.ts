@@ -139,6 +139,7 @@ describe("written responses and dispute outcomes", () => {
     const voided: PaperSnapshot = { ...single, voided: true };
     assert.equal(scoreObjective(voided, [], 4), 4);
     assert.equal(scoreObjective(voided, ["a"], 4), 4);
+    assert.equal(scoreObjective({ ...voided, type: "WRITTEN", options: [] }, [], 4), 4);
   });
 });
 

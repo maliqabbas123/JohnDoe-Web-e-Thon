@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment, Monitoring, Results and Analytics, Integrity, Candidate import and Attempts. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment, Monitoring, Results and Analytics, Integrity, Candidate import, Attempts and Disputes. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 

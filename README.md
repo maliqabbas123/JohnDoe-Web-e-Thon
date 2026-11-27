@@ -92,7 +92,8 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Results and analytics | Built |
 | Post-submission integrity signals and examiner review | Built |
 | Candidate import (CSV and JSON) | Built |
-| Reports and disputes | Designed, not built |
+| Candidate disputes | Built |
+| Reports | Designed, not built |
 
 **5.1 Integrity review.** After submission, the examiner can review server-recorded signals for timing, typing counts, similar responses, and the attempt's marker. The examiner can save a review note in the same view.
 

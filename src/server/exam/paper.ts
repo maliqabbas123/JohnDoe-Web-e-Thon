@@ -68,8 +68,8 @@ export function scoreObjective(
   selectedOptionIds: string[],
   marks: number,
 ): number | null {
-  if (snapshot.type === "WRITTEN") return null;
   if (snapshot.voided) return roundMarks(marks);
+  if (snapshot.type === "WRITTEN") return null;
 
   const known = new Set(snapshot.options.map((option) => option.id));
   const selected = [...new Set(selectedOptionIds)].filter((id) => known.has(id));
