@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed design. Foundation implemented; modules in progress |
+| Status | Agreed design. Foundation, auth and users implemented; other modules in progress |
 | Structure | Sections follow arc42; diagrams follow the C4 model (context, container, component) |
 | Related | [Data model](data-model.md), [API](api.md), [Security](security.md), [Decision records](adr/README.md) |
 

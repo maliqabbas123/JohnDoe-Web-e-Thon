@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. The endpoint list is the plan; an OpenAPI 3.1 file will be added as endpoints are built |
+| Status | Conventions are final. Built so far: Platform, Auth and Users. The rest of the endpoint list is the plan; an OpenAPI 3.1 file will be added as endpoints are built |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
