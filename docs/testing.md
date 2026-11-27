@@ -9,7 +9,7 @@
 
 | Level | What it covers | Where | Command |
 |---|---|---|---|
-| Unit | Pure logic with no server or database, such as password hashing; and a check that `docs/openapi.yaml` describes exactly the endpoints that exist | `src/**/*.test.ts`, `tests/unit` | `npm run test:unit` |
+| Unit | Pure logic with no server or database, such as password hashing and answer scoring; and a check that `docs/openapi.yaml` describes exactly the endpoints that exist | `src/**/*.test.ts`, `tests/unit` | `npm run test:unit` |
 | End-to-end | Every endpoint over HTTP against a production build and a real PostgreSQL database | `tests/e2e/*.test.ts` | `npm run test:e2e` |
 | Read time | Every read endpoint against large tables, with a time budget each. See [Read performance](performance.md) | `tests/perf/*.perf.ts` | `npm run test:perf` |
 | Static | Lint and type-check | whole repository | `npm run lint`, `npm run typecheck` |
