@@ -72,7 +72,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | A06 Vulnerable components | `npm audit` reviewed; lockfile committed | Built |
 | A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Built |
 | A08 Software and data integrity failures | Lockfile, migrations in version control, report content hashes | Built (lockfile, migrations) |
-| A09 Logging and monitoring failures | Audit log for sensitive actions, server logs for unexpected errors | Built for sign-in and user changes; per module after that |
+| A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in and user changes; per module after that |
 | A10 Server-side request forgery | The server makes no outbound requests | Built (by design) |
 
 ## 5. Examination integrity

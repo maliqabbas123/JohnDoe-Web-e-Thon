@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth and Users. The rest of the endpoint list is the plan; an OpenAPI 3.1 file will be added as endpoints are built |
+| Status | Conventions are final. Built so far: Platform, Auth, Users and Admin. The rest of the endpoint list is the plan; an OpenAPI 3.1 file will be added as endpoints are built |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -58,6 +58,8 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `POST /auth/change-password` | A E C | Change own password |
 | Users | `GET /users`, `POST /users` | A | List and create accounts |
 | | `GET /users/{id}`, `PATCH /users/{id}` | A | Read; change name, role, activation, password |
+| Admin | `GET /admin/overview` | A | Platform counts: users, exams, attempts, disputes, sessions, failed sign-ins |
+| | `GET /admin/audit-logs` | A | Audit log with filters by actor, action, record and time range |
 | Questions | `GET /topics`, `POST /topics` | E | Topics in own bank |
 | | `GET /questions`, `POST /questions` | E | List with filters; create |
 | | `GET /questions/{id}`, `PATCH /questions/{id}`, `DELETE /questions/{id}` | E | Read, edit, archive |

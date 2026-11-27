@@ -132,12 +132,23 @@ flowchart TB
 - Role checks ("is this an examiner?") live in the handler. Ownership checks ("is this *my* exam?") live in the service, next to the query.
 - Services return plain objects built from explicit field lists. Password hashes and answer keys are never selected for a candidate-facing response.
 
+### Role boundaries
+
+| Role | Can | Cannot |
+|---|---|---|
+| Administrator | Manage accounts, roles and activation; read the audit log; see platform-wide counts | See exam content, answer keys or candidates' answers; grade; decide disputes |
+| Examiner | Manage their own question bank, exams, enrolments, monitoring, grading, results and disputes | See another examiner's data; manage accounts or roles; read the audit log |
+| Candidate | Take exams they are enrolled in; see their own results; raise disputes on them | See any other candidate's data, or any exam they are not enrolled in |
+
+The administrator operates the platform and the examiner runs examinations. The two are deliberately separate: administrator endpoints return counts and account data only.
+
 ### Modules
 
 | Module | Responsibility | Brief |
 |---|---|---|
 | auth | Sign-up, sign-in, sign-out, current user, password change, sessions | 3.1 |
 | users | Administrator manages accounts, roles and activation | 3.1 |
+| admin | Platform overview and audit log viewer, for the administrator only | 3.1 |
 | questions | Topics, questions, options, difficulty labels, archive | 3.3 |
 | exams | Configuration, pool, difficulty mix, lifecycle, pre-publish review, rules for candidates | 3.2 |
 | enrolment | Enrol candidates, retake grants, a candidate's exam list | 3.4 |
