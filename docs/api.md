@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import and Grading. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading and Exams. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -78,7 +78,8 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `PUT /exams/{id}/questions` | E | Set the question pool |
 | | `PUT /exams/{id}/difficulty-rules` | E | Set the difficulty mix |
 | | `GET /exams/{id}/review` | E | Pre-publish checks and resulting counts |
-| | `POST /exams/{id}/publish`, `POST /exams/{id}/complete` | E | Lifecycle |
+| | `POST /exams/{id}/publish`, `POST /exams/{id}/unpublish`, `POST /exams/{id}/complete` | E | Lifecycle |
+| | `POST /exams/{id}/join-code`, `DELETE /exams/{id}/join-code` | E | Create, rotate or disable a join code |
 | Enrolment | `GET /exams/{id}/enrollments`, `POST /exams/{id}/enrollments` | E | List; enrol candidates |
 | | `DELETE /exams/{id}/enrollments/{candidateId}` | E | Remove before the first attempt |
 | | `POST /exams/{id}/retake-grants` | E | Give candidates an extra slot |

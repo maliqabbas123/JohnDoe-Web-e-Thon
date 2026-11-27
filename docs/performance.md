@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Measured for the administrator endpoints, question bank and import history. Each module adds its reads to the measurement suite |
+| Status | Measured for the administrator endpoints, question bank, import history and exams. Each module adds its reads to the measurement suite |
 | Related | [Testing](testing.md), [Data model](data-model.md) |
 
 ## 1. Approach
@@ -62,6 +62,17 @@ Measured with 20,500 import jobs across 201 examiners, including 500 for the sig
 |---|---|---|---|
 | Import jobs, first page | 4.6 ms | 5.7 ms | 30 ms |
 | Import jobs, after 400 entries with 50 per page | 5.4 ms | 7.0 ms | 30 ms |
+
+### Exams
+
+Measured with 32,000 exams across 301 examiners. The signed-in examiner owned 2,000 exams, and the detail and review endpoints used a 500-question pool. The review calculated a 60-question balanced paper.
+
+| Read | Median (ms) | 95th percentile (ms) | Budget (ms) |
+|---|---:|---:|---:|
+| Exams, first page | 9.9 | 14.8 | 50 |
+| Upcoming published exams, page 10 with 100 per page | 11.5 | 14.1 | 70 |
+| Exam detail | 16.5 | 22.6 | 80 |
+| Exam review | 12.7 | 21.4 | 70 |
 
 ## 3. What was changed and why
 
