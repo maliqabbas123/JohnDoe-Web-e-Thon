@@ -44,6 +44,16 @@ Design documents are in [`docs/`](docs/README.md): architecture (C4), data model
 
 Every pull request runs lint, type-check, unit tests, a dependency audit and the full end-to-end suite in CI.
 
+### For the UI team
+
+[`docs/openapi.yaml`](docs/openapi.yaml) is the API reference: every built endpoint, its request and response shapes, and notes on cookies, errors, rate limits and role routing. It is updated with every module, and a test fails if it falls out of step with the code. To browse it:
+
+```bash
+npx @redocly/cli preview --api docs/openapi.yaml
+```
+
+Or paste the file into any OpenAPI viewer.
+
 ## Test accounts
 
 Fictional accounts created by `npm run db:seed`. Running it again resets them.
