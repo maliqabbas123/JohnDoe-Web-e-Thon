@@ -188,6 +188,7 @@ model Exam {
   durationMinutes Int
   totalMarks      Decimal    @db.Decimal(7, 2)
   status          ExamStatus @default(DRAFT)
+  joinCode        String?    @unique
 
   // Paper construction
   selectionMode      SelectionMode      @default(FIXED)

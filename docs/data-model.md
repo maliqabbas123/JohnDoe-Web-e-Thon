@@ -107,6 +107,7 @@ erDiagram
     int durationMinutes
     decimal totalMarks
     enum status "DRAFT, PUBLISHED, COMPLETED"
+    string joinCode UK
     enum selectionMode "FIXED, BALANCED"
     int questionCount
     int maxAttempts "null = unlimited"
@@ -513,7 +514,8 @@ An examination: its slot, paper rules, attempt rules and integrity switches.
 | `endsAt` | timestamptz | no |  | End of the shared slot (UTC). No attempt runs past it. |
 | `durationMinutes` | integer | no |  | Time allowed per attempt. |
 | `totalMarks` | numeric(7,2) | no |  | Marks every paper adds up to. Checked before publishing. |
-| `status` | enum ExamStatus | no | `DRAFT` | DRAFT, PUBLISHED or COMPLETED. Ongoing is calculated from the slot. |
+| `status` | enum ExamStatus | no | `DRAFT` | DRAFT, PUBLISHED or COMPLETED. Ongoing and elapsed slots are calculated from the server clock. |
+| `joinCode` | text | yes |  | Unique random code. Null means joining by code is disabled. |
 | `selectionMode` | enum SelectionMode | no | `FIXED` | FIXED serves the whole pool; BALANCED draws a difficulty-balanced paper per attempt. |
 | `questionCount` | integer | yes |  | BALANCED mode: questions per paper. |
 | `shuffleQuestions` | boolean | no | `false` | Randomise question order per attempt. |

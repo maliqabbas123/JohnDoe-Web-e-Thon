@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.8.0
+  version: 0.9.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -87,6 +87,8 @@ tags:
     description: An examiner's reusable topics and questions. Examiner only; each examiner sees only their own.
   - name: Grading
     description: Review and grade closed submissions for an examiner's own exam.
+  - name: Exams
+    description: Exam configuration and publication. Examiner only.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -946,6 +948,267 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /exams:
+    get:
+      tags: [Exams]
+      operationId: listExams
+      summary: List your exams
+      description: |
+        **UI notes:** Show the paged examiner dashboard. The optional state filter includes ongoing and elapsed slots. Use the returned state to label the row.
+      parameters:
+        - name: state
+          in: query
+          schema: { $ref: "#/components/schemas/ExamState" }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: List your exams.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Exams]
+      operationId: createExam
+      summary: Create a draft exam
+      description: |
+        **UI notes:** Send the shared slot, time allowed and total marks. A draft can have an empty paper. Add its question pool and, for balanced mode, its difficulty rules before publishing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExamRequest" }
+      responses:
+        "201":
+          description: Create a draft exam.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDetailResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Exams]
+      operationId: getExam
+      summary: Read exam settings
+      description: |
+        **UI notes:** Load the editor with the ordered pool, difficulty rules and candidate-facing rules. Pool rows contain question IDs and difficulty. Fetch the bank question by ID when you need its full content.
+      responses:
+        "200":
+          description: Read exam settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDetailResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Exams]
+      operationId: updateExam
+      summary: Edit exam settings
+      description: |
+        **UI notes:** Send only fields you want to change. The instructions, attempt limit, result policy, dispute window and answer reveal setting stay editable after attempts exist. A mode change clears marks when switching to balanced and clears difficulty rules when switching to fixed. Unpublish an upcoming exam before making changes that would leave its paper incomplete.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExamRequest" }
+      responses:
+        "200":
+          description: Edit exam settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDetailResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/questions:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    put:
+      tags: [Exams]
+      operationId: replaceExamQuestions
+      summary: Replace the question pool
+      description: |
+        **UI notes:** Send the whole pool in paper order. Fixed papers need marks on every row. Omit marks or send null for balanced papers. An empty array clears a draft pool. Only active questions from your own bank can be added.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExamPoolRequest" }
+      responses:
+        "200":
+          description: Replace the question pool.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPoolResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/difficulty-rules:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    put:
+      tags: [Exams]
+      operationId: replaceExamDifficultyRules
+      summary: Replace the balanced paper rules
+      description: |
+        **UI notes:** Send the question count and one rule for each of EASY, MEDIUM and HARD. A draft may save an incomplete percentage total. Review checks that it sums to 100 before publishing. Equal rounding remainders go to EASY, then MEDIUM, then HARD.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExamDifficultyRulesRequest" }
+      responses:
+        "200":
+          description: Replace the balanced paper rules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDifficultyRulesResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/review:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Exams]
+      operationId: reviewExam
+      summary: Check whether an exam can be published
+      description: |
+        **UI notes:** Show blocking errors next to their fields and warnings separately. A warning about a small pool means questions at that level repeat on every paper. The review does not reserve the slot or the questions. Publish checks the latest data again.
+      responses:
+        "200":
+          description: Check whether an exam can be published.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamReviewResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /exams/{id}/publish:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Exams]
+      operationId: publishExam
+      summary: Publish a draft exam
+      description: |
+        **UI notes:** Send no request body. A 422 lists the failed checks in error.details. The exam needs a future slot and a paper whose marks and difficulty mix match its settings.
+      responses:
+        "200":
+          description: Publish a draft exam.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSummaryResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/unpublish:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Exams]
+      operationId: unpublishExam
+      summary: Return an upcoming exam to draft
+      description: |
+        **UI notes:** Send no request body. This is available before the main slot starts and while the exam has no attempts. Reload the exam on 409 to show its current state.
+      responses:
+        "200":
+          description: Return an upcoming exam to draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSummaryResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+
+  /exams/{id}/complete:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Exams]
+      operationId: completeExam
+      summary: Close a published exam
+      description: |
+        **UI notes:** Send no request body. The server refuses closure while a real attempt in the main slot has time remaining. Completing the main slot preserves existing deadlines and retake grants.
+      responses:
+        "200":
+          description: Close a published exam.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSummaryResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+
+  /exams/{id}/join-code:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Exams]
+      operationId: rotateExamJoinCode
+      summary: Generate or replace the join code
+      description: |
+        **UI notes:** Send no request body. Copy the returned code for intended candidates. Replacing a code immediately invalidates the previous value. Treat the code as private.
+      responses:
+        "200":
+          description: Generate or replace the join code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamJoinCodeResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ExamConflict" }
+    delete:
+      tags: [Exams]
+      operationId: disableExamJoinCode
+      summary: Disable the join code
+      description: |
+        **UI notes:** Clear the code from the screen. The 204 response has no body. This leaves existing enrolments in place.
+      responses:
+        "204":
+          description: Disable the join code.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -1070,7 +1333,7 @@ paths:
         page after grading. An empty page with a null cursor means there are
         no more answers. Sandbox previews are excluded.
       parameters:
-        - $ref: "#/components/parameters/GradingExamId"
+        - $ref: "#/components/parameters/ExamId"
         - $ref: "#/components/parameters/PageSize"
         - name: cursor
           in: query
@@ -1234,7 +1497,7 @@ components:
       description: The question's id.
       schema: { type: string, maxLength: 64 }
 
-    GradingExamId:
+    ExamId:
       name: id
       in: path
       required: true
@@ -1248,6 +1511,11 @@ components:
       schema: { type: string, maxLength: 64 }
 
   responses:
+    ExamConflict:
+      description: The current exam state or mode prevents this action.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     BadRequest:
       description: The body is not valid JSON, is empty, or the request contains an invalid character.
       content:
@@ -1847,6 +2115,261 @@ components:
                   - { $ref: "#/components/schemas/SessionUser" }
                   - { type: "null" }
 
+    ExamState:
+      type: string
+      enum: [DRAFT, PUBLISHED, ONGOING, COMPLETED]
+      description: Calculated state. The published main slot is ongoing from its start through its end and complete once the end passes.
+    ExamMarks:
+      type: number
+      minimum: 0.01
+      maximum: 99999.99
+      multipleOf: 0.01
+    ExamPositiveInt:
+      type: integer
+      minimum: 1
+      maximum: 2147483647
+    ExamSettings:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        instructions: { type: string, maxLength: 10000, default: "" }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        durationMinutes: { $ref: "#/components/schemas/ExamPositiveInt" }
+        totalMarks: { $ref: "#/components/schemas/ExamMarks" }
+        selectionMode: { type: string, enum: [FIXED, BALANCED], default: FIXED }
+        shuffleQuestions: { type: boolean, default: false }
+        shuffleOptions: { type: boolean, default: false }
+        multiSelectScoring: { type: string, enum: [ALL_OR_NOTHING, PARTIAL], default: ALL_OR_NOTHING }
+        maxAttempts:
+          description: Null means unlimited.
+          oneOf:
+            - { $ref: "#/components/schemas/ExamPositiveInt" }
+            - { type: "null" }
+          default: 1
+        resultPolicy: { type: string, enum: [BEST, LATEST], default: BEST }
+        disputeWindowHours:
+          description: Hours from result release. Null disables disputes.
+          oneOf:
+            - { $ref: "#/components/schemas/ExamPositiveInt" }
+            - { type: "null" }
+          default: 72
+        revealAnswers: { type: boolean, default: false }
+        desktopOnly: { type: boolean, default: true }
+        blockClipboard: { type: boolean, default: true }
+        blockContextMenu: { type: boolean, default: true }
+        requireFullscreen: { type: boolean, default: false }
+        detectExtraDisplay: { type: boolean, default: true }
+        watermark: { type: boolean, default: true }
+        aiNotice: { type: boolean, default: true }
+        honeypot: { type: boolean, default: true }
+    CreateExamRequest:
+      allOf:
+        - { $ref: "#/components/schemas/ExamSettings" }
+      required: [title, startsAt, endsAt, durationMinutes, totalMarks]
+      unevaluatedProperties: false
+    UpdateExamRequest:
+      allOf:
+        - { $ref: "#/components/schemas/ExamSettings" }
+      minProperties: 1
+      unevaluatedProperties: false
+    ExamSummary:
+      type: object
+      required: [id, title, status, state, startsAt, endsAt, durationMinutes, totalMarks, selectionMode, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, COMPLETED], description: Stored lifecycle status. }
+        state: { $ref: "#/components/schemas/ExamState" }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        durationMinutes: { $ref: "#/components/schemas/ExamPositiveInt" }
+        totalMarks: { $ref: "#/components/schemas/ExamMarks" }
+        selectionMode: { type: string, enum: [FIXED, BALANCED] }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        updatedAt: { $ref: "#/components/schemas/Instant" }
+    ExamSummaryResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/ExamSummary" }
+    ExamPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ExamSummary" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    ExamJoinCode:
+      type: string
+      pattern: "^[0-9a-f]{32}$"
+    ExamDetailResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/ExamSummary" }
+            - { $ref: "#/components/schemas/ExamSettings" }
+          required: [instructions, questionCount, questions, difficultyRules, rules, joinCode, publishedAt, completedAt, shuffleQuestions, shuffleOptions, multiSelectScoring, maxAttempts, resultPolicy, disputeWindowHours, revealAnswers, desktopOnly, blockClipboard, blockContextMenu, requireFullscreen, detectExtraDisplay, watermark, aiNotice, honeypot]
+          properties:
+            questionCount: { type: [integer, "null"], minimum: 1, maximum: 500 }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/ExamPoolRow" }
+            difficultyRules:
+              type: array
+              items: { $ref: "#/components/schemas/ExamDifficultyRule" }
+            rules: { $ref: "#/components/schemas/ExamCandidateRules" }
+            joinCode:
+              oneOf:
+                - { $ref: "#/components/schemas/ExamJoinCode" }
+                - { type: "null" }
+            publishedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+            completedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+    ExamCandidateRules:
+      type: object
+      required: [startsAt, endsAt, durationMinutes, maxAttempts, resultPolicy, selectionMode, multiSelectScoring, totalMarks, statements]
+      properties:
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        durationMinutes: { $ref: "#/components/schemas/ExamPositiveInt" }
+        maxAttempts: { type: [integer, "null"], minimum: 1 }
+        resultPolicy: { type: string, enum: [BEST, LATEST] }
+        selectionMode: { type: string, enum: [FIXED, BALANCED] }
+        multiSelectScoring: { type: string, enum: [ALL_OR_NOTHING, PARTIAL] }
+        totalMarks: { $ref: "#/components/schemas/ExamMarks" }
+        statements:
+          type: array
+          items: { type: string }
+    ExamPoolQuestion:
+      type: object
+      additionalProperties: false
+      required: [questionId]
+      properties:
+        questionId: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        marks:
+          oneOf:
+            - { $ref: "#/components/schemas/ExamMarks" }
+            - { type: "null" }
+    ExamPoolRequest:
+      type: object
+      additionalProperties: false
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/ExamPoolQuestion" }
+    ExamPoolRow:
+      type: object
+      required: [questionId, marks, position, question]
+      properties:
+        questionId: { type: string }
+        marks:
+          oneOf:
+            - { $ref: "#/components/schemas/ExamMarks" }
+            - { type: "null" }
+        position: { type: integer, minimum: 1 }
+        question:
+          type: object
+          required: [difficulty, isArchived]
+          properties:
+            difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+            isArchived: { type: boolean }
+    ExamPoolResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [questions]
+          properties:
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/ExamPoolRow" }
+    ExamDifficultyRule:
+      type: object
+      additionalProperties: false
+      required: [difficulty, percent, marksEach]
+      properties:
+        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        marksEach: { $ref: "#/components/schemas/ExamMarks" }
+    ExamDifficultyRulesRequest:
+      type: object
+      additionalProperties: false
+      required: [questionCount, rules]
+      properties:
+        questionCount: { type: integer, minimum: 1, maximum: 500 }
+        rules:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { $ref: "#/components/schemas/ExamDifficultyRule" }
+    ExamDifficultyRulesResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [questionCount, difficultyRules]
+          properties:
+            questionCount: { type: integer, minimum: 1, maximum: 500 }
+            difficultyRules:
+              type: array
+              items: { $ref: "#/components/schemas/ExamDifficultyRule" }
+    ExamReviewResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [canPublish, errors, warnings, questionCount, paperMarks, difficulty]
+          properties:
+            canPublish: { type: boolean }
+            errors:
+              type: array
+              items: { $ref: "#/components/schemas/ExamReviewIssue" }
+            warnings:
+              type: array
+              items: { $ref: "#/components/schemas/ExamReviewIssue" }
+            questionCount: { type: [integer, "null"], minimum: 0 }
+            paperMarks: { type: [number, "null"], minimum: 0 }
+            difficulty:
+              type: array
+              items:
+                type: object
+                required: [difficulty, available, required, percent, marksEach]
+                properties:
+                  difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+                  available: { type: integer, minimum: 0 }
+                  required: { type: integer, minimum: 0 }
+                  percent: { type: integer, minimum: 0, maximum: 100 }
+                  marksEach: { $ref: "#/components/schemas/ExamMarks" }
+    ExamReviewIssue:
+      type: object
+      required: [path, message]
+      properties:
+        path: { type: string }
+        message: { type: string }
+    ExamJoinCodeResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [joinCode]
+          properties:
+            joinCode: { $ref: "#/components/schemas/ExamJoinCode" }
+
     AuditAction:
       type: string
       description: |
@@ -1864,6 +2387,9 @@ components:
         - USER_SESSIONS_REVOKED
         - USER_SIGN_IN_UNLOCKED
         - ANSWER_GRADED
+        - EXAM_PUBLISHED
+        - EXAM_UNPUBLISHED
+        - EXAM_COMPLETED
 
     AuditEntry:
       type: object
