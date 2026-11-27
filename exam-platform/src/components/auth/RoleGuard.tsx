@@ -2,7 +2,9 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
-import { useStore } from '../../context/MockStoreContext'
+import { useAuth } from '@/context/AuthContext'
+import { isLive } from '@/lib/api'
+import { Unavailable } from './Unavailable'
 import type { Role } from '../../types'
 
 export function ClientRedirect({ href }: { href: string }) {
@@ -26,13 +28,20 @@ export function RoleGuard({
   children: ReactNode
   query?: string
 }) {
-  const { ready, user } = useStore()
+  const { ready, user, error, refresh } = useAuth()
   const pathname = usePathname()
   if (!ready)
     return (
       <p className="route-status" role="status">
         Loading workspace…
       </p>
+    )
+  if (error)
+    return (
+      <div className="route-status">
+        <p role="alert">{error}</p>
+        <button className="button secondary" onClick={refresh}>Retry</button>
+      </div>
     )
   if (!user)
     return (
@@ -51,7 +60,7 @@ export function AttemptGuard({ children }: { children: ReactNode }) {
       roles={sandbox ? ['Examiner'] : ['Candidate']}
       query={sandbox ? '?sandbox=true' : ''}
     >
-      {children}
+      {isLive ? <Unavailable href={sandbox ? "/examiner" : "/candidate"} /> : children}
     </RoleGuard>
   )
 }

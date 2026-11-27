@@ -1,12 +1,13 @@
 'use client'
 
 import { Button } from '../../components/shared'
-import { home, useStore } from '../../context/MockStoreContext'
+import { home } from '../../context/MockStoreContext'
+import { useAuth } from '@/context/AuthContext'
 
 import { PublicCard } from './shared'
 
 export function UnauthorizedPage() {
-  const { user } = useStore()
+  const { user } = useAuth()
   return (
     <PublicCard
       title="403 Access denied"

@@ -1,3 +1,5 @@
+import { DemoAuthProvider, LiveAuthProvider } from '@/context/AuthContext'
+import { isLive } from '@/lib/api'
 import { ToastProvider } from '@/components/shared/ToastProvider'
 import { MockStoreProvider } from '@/context/MockStoreContext'
 import type { Metadata } from 'next'
@@ -13,9 +15,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <MockStoreProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </MockStoreProvider>
+        {isLive ? (
+          <LiveAuthProvider>{children}</LiveAuthProvider>
+        ) : (
+          <MockStoreProvider>
+            <DemoAuthProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </DemoAuthProvider>
+          </MockStoreProvider>
+        )}
       </body>
     </html>
   )
