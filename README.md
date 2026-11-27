@@ -17,6 +17,7 @@ npm install
 cp .env.example .env
 npm run db:up
 npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
@@ -31,12 +32,34 @@ The app runs at http://localhost:3000. `GET /api/v1/health` reports whether the 
 | `npm run lint` | Lint the code |
 | `npm run db:up` | Start the local PostgreSQL container (port 5434) |
 | `npm run db:migrate` | Apply schema changes and create a migration |
+| `npm run db:seed` | Create or reset the test accounts |
 | `npm run db:studio` | Browse the database |
+| `npm test` | Run unit tests |
 
 ## Documentation
 
 Design documents are in [`docs/`](docs/README.md): architecture (C4), data model with data dictionary, API, security threat model and decision records.
 
+## Test accounts
+
+Fictional accounts created by `npm run db:seed`. Running it again resets them.
+
+| Role | Email | Password |
+|---|---|---|
+| Administrator | `admin@exam.test` | `Admin-Demo-2026` |
+| Examiner | `examiner@exam.test` | `Examiner-Demo-2026` |
+| Candidate | `candidate@exam.test` | `Candidate-Demo-2026` |
+| Candidate | `candidate2@exam.test` | `Candidate-Demo-2026` |
+
+Sign in with `POST /api/v1/auth/login` and a JSON body of `email` and `password`. The session is kept in an `HttpOnly` cookie.
+
 ## Status
 
-Foundation and design are in place: data model, shared server code and the health endpoint. Feature modules, test credentials for each role and the innovation challenge write-up are added as they are built.
+| Module | State |
+|---|---|
+| Platform foundation | Built |
+| Auth and sessions | Built |
+| User management | Built |
+| Question bank, exams, enrolment, attempts, monitoring, grading, results, reports, import, disputes, integrity | Designed, not built |
+
+The innovation challenge write-up is added with the modules that implement it.

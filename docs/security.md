@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed design. The Status column in each table says what is built |
+| Status | Agreed design. Authentication and user management are built; the Status column in each table says what else is |
 | Method | Threat model by STRIDE; controls mapped to the OWASP Top 10 (2021) |
 | Related | [Architecture](architecture.md), [ADR 0002](adr/0002-server-side-sessions.md), [ADR 0010](adr/0010-integrity-signals.md) |
 
@@ -40,37 +40,37 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 
 | Category | Threat | Control | Status |
 |---|---|---|---|
-| Spoofing | Guessing or stuffing passwords | scrypt hashes; rate limit per address and per email; same error for unknown email and wrong password | Planned |
-| Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Planned |
-| Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Planned |
+| Spoofing | Guessing or stuffing passwords | scrypt hashes; rate limit per address and per email; same error for unknown email and wrong password | Built |
+| Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Built |
+| Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Built (previous session ended); incident record Planned |
 | Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Planned |
-| Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Planned |
+| Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |
 | Tampering | Changing the device clock to gain time | Deadline fixed at start and compared with the server clock | Planned |
-| Tampering | Injection through input | Parameterised queries only; schema validation on every input | Built (query layer), Planned (schemas per module) |
-| Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Planned |
+| Tampering | Injection through input | Parameterised queries only; schema validation on every input | Built for auth and users; per module after that |
+| Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in and user changes; Planned for grading and disputes |
 | Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
 | Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
-| Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Planned |
+| Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in and password change; Planned for the rest |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
-| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Planned |
+| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management; per module after that |
 | Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Planned |
-| Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built (origin check) |
+| Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
 
 ## 4. OWASP Top 10 (2021) mapping
 
 | Risk | How it is addressed | Status |
 |---|---|---|
-| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Planned |
-| A02 Cryptographic failures | scrypt for passwords, SHA-256 token hashes, HTTPS in production, no secrets in the repository | Built (secrets), Planned (rest) |
+| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management; per module after that |
+| A02 Cryptographic failures | scrypt for passwords, SHA-256 token hashes, HTTPS in production, no secrets in the repository | Built |
 | A03 Injection | Prisma parameterised queries, Zod validation, no HTML rendering of user content by the API | Built (queries) |
 | A04 Insecure design | Threat model, decision records, server-authoritative time, frozen papers, idempotent operations | Built (design) |
 | A05 Security misconfiguration | Security headers, `no-store` API responses, no framework banner, generic errors | Built |
 | A06 Vulnerable components | `npm audit` reviewed; lockfile committed | Built |
-| A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Planned |
+| A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Built |
 | A08 Software and data integrity failures | Lockfile, migrations in version control, report content hashes | Built (lockfile, migrations) |
-| A09 Logging and monitoring failures | Audit log for sensitive actions, server logs for unexpected errors | Planned |
+| A09 Logging and monitoring failures | Audit log for sensitive actions, server logs for unexpected errors | Built for sign-in and user changes; per module after that |
 | A10 Server-side request forgery | The server makes no outbound requests | Built (by design) |
 
 ## 5. Examination integrity
