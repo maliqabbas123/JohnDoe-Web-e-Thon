@@ -49,6 +49,7 @@ export async function removeTempUsers(): Promise<void> {
   await sql(`DELETE FROM "Exam" WHERE "ownerId" IN (${owners})`, pattern);
   await sql(`DELETE FROM "Question" WHERE "ownerId" IN (${owners})`, pattern);
   await sql(`DELETE FROM "Topic" WHERE "ownerId" IN (${owners})`, pattern);
+  await sql(`DELETE FROM "ImportJob" WHERE "userId" IN (${owners})`, pattern);
   await sql(`DELETE FROM "User" WHERE email LIKE $1`, pattern);
 }
 

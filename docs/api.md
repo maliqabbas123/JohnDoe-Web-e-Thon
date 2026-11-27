@@ -2,13 +2,13 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin and Question bank. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank and Question import. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
 ## 1. Conventions
 
-- JSON request and response bodies, UTF-8.
+- Request and response bodies use UTF-8. Responses are JSON. Requests are JSON unless the operation documents a different format.
 - Authentication by session cookie. Send requests with credentials included.
 - All times are ISO 8601 in UTC, for example `2026-11-28T09:00:00.000Z`.
 - Responses are never cached (`Cache-Control: no-store`).
@@ -26,7 +26,7 @@ Lists add paging information:
 { "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
 ```
 
-Lists that can grow without bound, such as the audit log, page by cursor instead. Send `meta.nextCursor` back as `cursor` to read on; `null` means the end. `total` is included only when `withTotal=true` is sent, on the first page:
+The audit log and import history use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
 
 ```json
 { "data": [], "meta": { "pageSize": 20, "nextCursor": null } }
@@ -45,7 +45,7 @@ Lists that can grow without bound, such as the audit log, page by cursor instead
 | 403 | `FORBIDDEN` | Role, ownership or origin check failed |
 | 404 | `NOT_FOUND` | Missing, or not visible to this user |
 | 409 | `CONFLICT` | State conflict: duplicate, attempt closed, window not open |
-| 413 | `PAYLOAD_TOO_LARGE` | JSON body over 64 KB, or file over the limit |
+| 413 | `PAYLOAD_TOO_LARGE` | Request exceeds the operation’s byte or row limit |
 | 422 | `VALIDATION_FAILED` | Input failed validation; `details` lists fields |
 | 429 | `RATE_LIMITED` | Too many requests; see `Retry-After` |
 | 500 | `INTERNAL` | Unexpected error; no detail is returned |
@@ -113,8 +113,9 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Reports | `POST /attempts/{id}/report` | E | Issue a verifiable report |
 | | `GET /attempts/{id}/report.pdf` | E C | Download |
 | | `GET /verify/{code}` | P | Check a report |
-| Import | `POST /import/candidates`, `POST /import/questions` | E | Bulk import from CSV or JSON |
-| | `GET /import/jobs` | E | Past imports with row errors |
+| Import | `POST /import/questions` | E | Bulk import questions from CSV or JSON |
+| | `GET /import/jobs` | E | Own past imports with row errors |
+| | `POST /import/candidates` | E | Planned candidate import |
 | Workspace | `GET /me/preferences`, `PUT /me/preferences` | C | Exam workspace settings |
 
 ## 3. Contract for the exam page

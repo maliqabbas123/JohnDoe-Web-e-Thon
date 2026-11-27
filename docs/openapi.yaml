@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.6.0
+  version: 0.7.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -12,7 +12,7 @@ info:
     # Notes for the UI team
 
     ## Sending requests
-    - Base URL is `/api/v1`. Send and expect JSON (`Content-Type: application/json`).
+    - Base URL is `/api/v1`. Responses use JSON. Requests use JSON unless the operation documents another content type.
     - Authentication is a session cookie named `exam_session`. It is `HttpOnly`,
       so JavaScript cannot read it and you never handle a token yourself.
     - **Always send credentials**: `fetch(url, { credentials: "include" })`, or
@@ -832,6 +832,118 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /import/questions:
+    post:
+      tags: [Question bank]
+      operationId: importQuestions
+      summary: Bulk import questions into your question bank
+      description: |
+        Examiner only. The job record and valid questions are stored together.
+        Each rejected row reports its first error with a row number, field, and
+        message. A valid file creates a job even if every row is rejected.
+
+        **UI notes:** Send the UTF-8 file itself as the request body, with
+        `text/csv` or `application/json`. A UTF-8 byte order mark is accepted.
+        Use `fileName` to preserve the original name in history. Each file
+        can contain 1–100 questions and use at most 512 KiB (524,288 bytes).
+        Each examiner can submit 10 uploads per 60-second window.
+
+        - JSON is an array of the same objects used by `POST /questions`.
+          Row 1 is the first array item.
+        - CSV must start with the exact header shown in the example. Row 2
+          is the first record after the header. A quoted cell may contain
+          commas and line breaks, and doubled quotes escape a literal quote.
+          A line break inside a quoted cell does not advance the row number.
+          Use a decimal for `defaultMarks` and leave `explanation` blank if
+          omitted. For objective questions, put a JSON array of
+          `{text,isCorrect}` objects in the `options` column and CSV-escape
+          its quotes. For written questions, leave `options` blank.
+          See the [example file](examples/question-import.csv).
+        - Replace the placeholder topic in the example with the ID of one
+          of the signed-in examiner's topics from `GET /topics`. Unknown
+          topics and other examiners' topics get the same row error.
+        - A duplicate of an earlier valid row in the same file is rejected.
+          Importing the same file again creates a separate job and questions.
+          After a partial import, resubmit only corrected rows.
+        - On 201 display the counts and row errors, then refresh history and
+          the question bank. On 400, 403, 413 or 422 the file created no job
+          and changed no questions. Use the retry countdown on 429.
+      parameters:
+        - in: query
+          name: fileName
+          description: Original file name without path separators or control characters. Defaults to questions.csv or questions.json.
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 100
+              items: { $ref: "#/components/schemas/CreateQuestionRequest" }
+            example:
+              - { topicId: replace-with-your-topic-id, type: WRITTEN, difficulty: HARD, text: Explain how you solved it., defaultMarks: 2 }
+          text/csv:
+            schema: { type: string }
+            example: |
+              topicId,type,difficulty,text,explanation,defaultMarks,options
+              replace-with-your-topic-id,SINGLE_CHOICE,EASY,"What is 2 + 2?",,1,"[{""text"":""3"",""isCorrect"":false},{""text"":""4"",""isCorrect"":true}]"
+              replace-with-your-topic-id,WRITTEN,HARD,"Explain how you solved it, and show your working.",,2,
+      responses:
+        "201":
+          description: The recorded import outcome, including any rejected rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ImportJob" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /import/jobs:
+    get:
+      tags: [Question bank]
+      operationId: listImportJobs
+      summary: List your past imports
+      description: |
+        Examiner only. Returns only your import jobs, newest first.
+
+        **UI notes:** Display each job's counts and expand its `errors` list
+        for per-row feedback. Request the next page using only the
+        `meta.nextCursor` from the previous response as `cursor`. A null
+        cursor means the end of the history.
+      parameters:
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: cursor
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: An import history page with row errors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportJob" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -1021,7 +1133,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     PayloadTooLarge:
-      description: The JSON body is larger than 64 KB.
+      description: The request exceeds the byte or row limit for this operation.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1395,6 +1507,29 @@ components:
           description: Replaces the whole option set.
           items: { $ref: "#/components/schemas/OptionInput" }
         isArchived: { type: boolean }
+
+    ImportJob:
+      type: object
+      additionalProperties: false
+      required: [id, kind, fileName, totalRows, successCount, failureCount, errors, createdAt]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [QUESTIONS, CANDIDATES] }
+        fileName: { type: string }
+        totalRows: { type: integer, minimum: 1 }
+        successCount: { type: integer, minimum: 0 }
+        failureCount: { type: integer, minimum: 0 }
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [row, field, message]
+            properties:
+              row: { type: integer, minimum: 1 }
+              field: { type: string, examples: [topicId, options.0.text, row] }
+              message: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
 
     UserActivity:
       type: object

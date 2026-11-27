@@ -172,20 +172,24 @@ export async function getQuestion(owner: SessionUser, id: string) {
   return present(question);
 }
 
+export function questionCreateData(ownerId: string, input: CreateQuestionInput) {
+  return {
+    ownerId,
+    topicId: input.topicId,
+    type: input.type,
+    difficulty: input.difficulty,
+    text: input.text,
+    explanation: input.explanation || null,
+    defaultMarks: input.defaultMarks,
+    options: { create: optionRows(input.options) },
+  } satisfies Prisma.QuestionUncheckedCreateInput;
+}
+
 export async function createQuestion(owner: SessionUser, input: CreateQuestionInput) {
   await assertOwnTopic(owner.id, input.topicId);
 
   const question = await db.question.create({
-    data: {
-      ownerId: owner.id,
-      topicId: input.topicId,
-      type: input.type,
-      difficulty: input.difficulty,
-      text: input.text,
-      explanation: input.explanation || null,
-      defaultMarks: input.defaultMarks,
-      options: { create: optionRows(input.options) },
-    },
+    data: questionCreateData(owner.id, input),
     select: questionView,
   });
   return present(question);
