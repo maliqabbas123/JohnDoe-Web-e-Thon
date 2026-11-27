@@ -57,7 +57,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
 | Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining, question import, candidate import and incident intake. Planned for autosave |
 | Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Candidate imports are capped at 512 KiB and 50 rows. Requests over a limit receive 413 | Built |
-| Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
+| Denial of service | Oversized or malicious uploads | 4 MiB limit; PDF, PNG or JPEG signatures checked; downloads are scoped to the author and exam owner and use `nosniff` | Built for disputes |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
 | Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams, enrolment, attempts, grading and results |
