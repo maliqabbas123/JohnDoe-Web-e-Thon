@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams and Workspace preferences. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment, Monitoring, Results and Analytics, Integrity, Candidate import, Attempts, Disputes and Reports. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -26,7 +26,7 @@ Lists add paging information:
 { "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
 ```
 
-The audit log, import history and grading queue use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
+The audit log, import history, grading queue, result lists, paper fairness and question analytics use cursor paging. Send `meta.nextCursor` as `cursor` to read the next page. A null cursor marks the end. On lists that accept `withTotal=true`, the count is included on the first page only.
 
 ```json
 { "data": [], "meta": { "pageSize": 20, "nextCursor": null } }
@@ -82,7 +82,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `POST /exams/{id}/join-code`, `DELETE /exams/{id}/join-code` | E | Create, rotate or disable a join code |
 | Enrolment | `GET /exams/{id}/enrollments`, `POST /exams/{id}/enrollments` | E | List; enrol candidates |
 | | `DELETE /exams/{id}/enrollments/{candidateId}` | E | Remove before the first attempt |
-| | `POST /exams/{id}/retake-grants` | E | Give candidates an extra slot |
+| | `GET /exams/{id}/retake-grants`, `POST /exams/{id}/retake-grants` | E | List and grant extra slots |
 | | `POST /me/exams/join` | C | Enrol in an exam with its join code |
 | | `GET /me/exams` | C | Own upcoming, available, in-progress and completed exams |
 | | `GET /me/exams/{id}` | C | Instructions, rules and own status |
@@ -91,18 +91,18 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `GET /attempts/{id}/questions/{position}` | C | One question, without the answer key |
 | | `PUT /attempts/{id}/answers/{position}` | C | Save an answer or review flag |
 | | `PUT /attempts/{id}/scratchpad` | C | Save rough work |
-| | `POST /attempts/{id}/heartbeat` | C | Contact signal; returns server time and announcements |
 | | `POST /attempts/{id}/submit` | C | Submit |
 | | `POST /exams/{id}/sandbox`, `DELETE /exams/{id}/sandbox` | E | Preview as a candidate; reset |
-| Monitoring | `GET /exams/{id}/monitor` | E | Live attempts, progress, connection, incidents |
+| Monitoring | `POST /attempts/{id}/heartbeat` | C | Contact signal, fixed deadline and new announcements |
+| | `GET /exams/{id}/monitor` | E | Attempt progress, connection, disruption and signal counts |
 | | `POST /attempts/{id}/incidents` | C | Report exam-page events |
 | | `GET /exams/{id}/announcements`, `POST /exams/{id}/announcements` | E | List; send |
 | Grading | `GET /exams/{id}/grading` | E | Written answers waiting for a mark, cursor-paged |
 | | `GET /attempts/{id}/review` | E | Review a closed submission, including the frozen answer key |
 | | `PATCH /attempts/{id}/answers/{position}/grade` | E | Mark a written answer |
-| Integrity | `GET /attempts/{id}/integrity` | E | Signal summary for one attempt |
+| Integrity | `GET /attempts/{id}/integrity` | E | Post-submission signal summary and examiner review note for an owned attempt |
 | | `PUT /attempts/{id}/integrity/review` | E | Record the examiner's conclusion |
-| Results | `GET /exams/{id}/results` | E | Scores before and after release |
+| Results | `GET /exams/{id}/results` | E | Policy-selected attempt, score, grading and release state for each enrolled candidate |
 | | `POST /exams/{id}/results/release` | E | Release results |
 | | `GET /me/results`, `GET /me/results/{attemptId}` | C | Own released results and attempt review |
 | | `GET /exams/{id}/analytics` | E | Exam statistics and fairness report |
@@ -117,7 +117,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `GET /verify/{code}` | P | Check a report |
 | Import | `POST /import/questions` | E | Bulk import questions from CSV or JSON |
 | | `GET /import/jobs` | E | Own past imports with row errors |
-| | `POST /import/candidates` | E | Planned candidate import |
+| | `POST /import/candidates` | E | Import candidates, enrol them in an owned exam and receive first passwords for new accounts |
 | Workspace | `GET /me/preferences`, `PUT /me/preferences` | C | Read or replace the signed-in candidate’s workspace settings |
 
 ## 3. Contract for the exam page
@@ -133,7 +133,7 @@ The frontend's exam page is responsible for the following. The server works with
 | On each answer change, debounced | `PUT /attempts/{id}/answers/{position}` with an increasing `revision` and the typing counts |
 | On each event in 3.2 | `POST /attempts/{id}/incidents` |
 
-Use the `serverTime` and `deadlineAt` from responses to run the countdown. Never use the device clock for the deadline.
+Use `serverTime` and `deadlineAt` to run the countdown. Retain the heartbeat's `announcementCursor` per attempt and send it as `cursor` on the next call. Fetch another page immediately when `hasMoreAnnouncements` is true. Stop heartbeats when the status leaves `IN_PROGRESS`.
 
 ### 3.2 Incident events
 

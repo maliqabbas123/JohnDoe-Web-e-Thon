@@ -44,30 +44,31 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Built |
 | Spoofing | A session believed to be compromised | An administrator can end all of a user's sessions at once | Built |
 | Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Built (previous session ended); incident record Planned |
-| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Built for manual grades; planned for answer saves and disputes |
+| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Built for manual grades and answer saves; planned for disputes |
 | Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |
 | Tampering | Changing the device clock to gain time | Deadline fixed at start and compared with the server clock | Planned |
 | Tampering | Injection through input | Parameterised queries only; schema validation on every input; search terms treated as literal text; NUL characters and malformed ids refused before any query | Built for auth and users; per module after that |
 | Repudiation | Denying a grade change, role change or dispute decision | Append-only audit log and `GradeChange` history with actor and reason | Built for sign-in, user changes and grading; planned for disputes |
-| Information disclosure | Answer keys reaching a candidate | Keys live in the attempt snapshot and are stripped from every candidate response; one question per request; no caching | Planned |
-| Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Planned |
+| Information disclosure | Answer keys reaching a candidate | Keys come from frozen snapshots and are shown to candidates only for their own released results when the examiner enables reveal | Built for results; planned for live attempts |
+| Information disclosure | Reading another candidate's attempt or result by changing an id | Object-level check in every service; not-found for records the user may not see | Built for released results; planned for live attempts |
 | Information disclosure | Reading another candidate’s workspace preferences | Both routes require the candidate role and use the signed-in user ID for the database lookup | Built |
+| Tampering | Forging server-detected incidents | Intake accepts only documented client event types and derives source, severity and receive time on the server | Built |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
-| Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
-| Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change and question import; Planned for autosave and candidate import |
-| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Question imports are capped at 512 KiB and 100 rows. Requests over either limit receive 413 | Built |
-| Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
+| Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and issue date. Codes are random and the endpoint is rate-limited | Built |
+| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining, question import, candidate import and incident intake. Planned for autosave |
+| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Candidate imports are capped at 512 KiB and 50 rows. Requests over a limit receive 413 | Built |
+| Denial of service | Oversized or malicious uploads | 4 MiB limit; PDF, PNG or JPEG signatures checked; downloads are scoped to the author and exam owner and use `nosniff` | Built for disputes |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
-| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams and grading |
-| Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Built for exam management and grading; planned for other exam modules |
+| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams, enrolment, attempts, grading and results |
+| Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Built for exam management, grading and results; planned for other exam modules |
 | Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
 
 ## 4. OWASP Top 10 (2021) mapping
 
 | Risk | How it is addressed | Status |
 |---|---|---|
-| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams and grading |
+| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams, enrolment, attempts and grading |
 | A02 Cryptographic failures | scrypt for passwords, SHA-256 token hashes, HTTPS in production, no secrets in the repository | Built |
 | A03 Injection | Prisma parameterised queries, Zod validation, no HTML rendering of user content by the API | Built (queries) |
 | A04 Insecure design | Threat model, decision records, server-authoritative time, frozen papers, idempotent operations | Built (design) |
@@ -75,7 +76,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | A06 Vulnerable components | Lockfile committed; all dependencies audited on every pull request, which fails on a high-severity advisory | Built |
 | A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Built |
 | A08 Software and data integrity failures | Lockfile, migrations in version control, report content hashes | Built (lockfile, migrations) |
-| A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in, user changes, exam lifecycle and manual grading |
+| A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in, user changes, exam lifecycle, retake grants, manual grading and result release |
 | A10 Server-side request forgery | The server makes no outbound requests | Built (by design) |
 
 ## 5. Examination integrity
@@ -91,7 +92,7 @@ These protect the exam itself and go beyond conventional application security.
 | One attempt in progress; attempt limit | Server and database | No |
 | One active session; new sign-in ends the old one | Server | No |
 | Desktop-only check when an attempt starts | Server (best effort, from request headers) | With effort |
-| Answer speed, typing counts versus answer length, similarity | Server analysis | No |
+| Answer speed, typing counts versus answer length, similarity | Server analysis on the examiner's first and subsequent integrity reads for a closed attempt | No |
 | Honeypot marker for AI assistants | Server inserts and checks | Only by noticing and removing it |
 | Visible notice that AI assistants must not answer | Server inserts | No |
 | Copy, cut, paste, right-click and shortcut blocking | Exam page | Yes, with developer tools |
@@ -102,6 +103,7 @@ Because the last group can be bypassed, the server treats those events as suppor
 
 ## 6. Privacy
 
+- Candidate import sends each generated first password only in the upload response. Account storage holds its scrypt hash, and the job history holds import counts and row errors.
 - No camera, microphone or screen recording is collected.
 - Typing is recorded as counts only, never as the keys pressed.
 - Candidates are shown, before starting, every rule and everything that will be recorded.
