@@ -2,6 +2,7 @@ import "server-only";
 import type { AttemptStatus, ConnectionState } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { errors } from "@/server/http/errors";
+import { closeElapsedAttempt } from "@/server/modules/attempts/lifecycle";
 import { afterAnnouncement, announcementCursor, type Announcement } from "./announcements";
 import type { AnnouncementCursor } from "./schemas";
 
@@ -45,6 +46,7 @@ export async function heartbeat(attemptId: string, candidateId: string, cursor?:
     const serverTime = new Date();
     const status = effectiveAttemptStatus(attempt.status, attempt.deadlineAt, serverTime);
     const active = status === "IN_PROGRESS";
+    if (status !== attempt.status) await closeElapsedAttempt(tx, attemptId, serverTime);
     if (active) {
       const seenAt = new Date(Math.max(serverTime.getTime(), attempt.lastSeenAt.getTime()));
       await tx.attempt.update({

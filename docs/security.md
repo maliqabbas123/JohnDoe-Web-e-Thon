@@ -44,7 +44,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Spoofing | Stealing a session | `HttpOnly`, `SameSite`, `Secure` cookie; only the token hash is stored; 8-hour expiry; revoked on logout and password change | Built |
 | Spoofing | A session believed to be compromised | An administrator can end all of a user's sessions at once | Built |
 | Spoofing | Someone else taking the exam on a second device | A new sign-in ends the previous session and records an incident | Built (previous session ended); incident record Planned |
-| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Built for manual grades; planned for answer saves and disputes |
+| Tampering | Changing an answer or score through the API | Ownership check on every write; saves rejected after the deadline; score changes only through grading or disputes, each recorded | Built for manual grades and answer saves; planned for disputes |
 | Tampering | Sending `role` or another user's id in a request | Schemas reject unknown fields; identity comes from the session only | Built |
 | Tampering | Changing the device clock to gain time | Deadline fixed at start and compared with the server clock | Planned |
 | Tampering | Injection through input | Parameterised queries only; schema validation on every input; search terms treated as literal text; NUL characters and malformed ids refused before any query | Built for auth and users; per module after that |
@@ -60,7 +60,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
-| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams, enrolment, grading and results |
+| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams, enrolment, attempts, grading and results |
 | Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Built for exam management, grading and results; planned for other exam modules |
 | Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
 
@@ -68,7 +68,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 
 | Risk | How it is addressed | Status |
 |---|---|---|
-| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams, enrolment and grading |
+| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams, enrolment, attempts and grading |
 | A02 Cryptographic failures | scrypt for passwords, SHA-256 token hashes, HTTPS in production, no secrets in the repository | Built |
 | A03 Injection | Prisma parameterised queries, Zod validation, no HTML rendering of user content by the API | Built (queries) |
 | A04 Insecure design | Threat model, decision records, server-authoritative time, frozen papers, idempotent operations | Built (design) |

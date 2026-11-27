@@ -2,6 +2,7 @@ import "server-only";
 import type { AttemptStatus } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { errors } from "@/server/http/errors";
+import { closeElapsedAttempt } from "@/server/modules/attempts/lifecycle";
 import { effectiveAttemptStatus } from "./contact";
 import type { ClientIncident } from "./schemas";
 
@@ -27,7 +28,7 @@ function reportedPosition(event: ClientIncident) {
 }
 
 export async function recordClientIncidents(attemptId: string, candidateId: string, incidents: ClientIncident[]) {
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const [attempt] = await tx.$queryRaw<IncidentAttempt[]>`
       SELECT a.status, a."deadlineAt", e."requireFullscreen", e."blockClipboard",
              e."blockContextMenu", e."detectExtraDisplay"
@@ -37,9 +38,9 @@ export async function recordClientIncidents(attemptId: string, candidateId: stri
     `;
     if (!attempt) throw errors.notFound();
     const now = new Date();
-    if (effectiveAttemptStatus(attempt.status, attempt.deadlineAt, now) !== "IN_PROGRESS") {
-      throw errors.conflict("The attempt is closed.");
-    }
+    const status = effectiveAttemptStatus(attempt.status, attempt.deadlineAt, now);
+    if (status !== attempt.status) await closeElapsedAttempt(tx, attemptId, now);
+    if (status !== "IN_PROGRESS") return null;
 
     const positions = [...new Set(incidents.flatMap((event) => {
       const position = reportedPosition(event);
@@ -70,4 +71,6 @@ export async function recordClientIncidents(attemptId: string, candidateId: stri
     const { count } = await tx.incident.createMany({ data });
     return { accepted: count };
   });
+  if (!result) throw errors.conflict("The attempt is closed.");
+  return result;
 }

@@ -110,6 +110,16 @@ With 150 closed attempts and ten answers each, `GET /attempts/{id}/integrity`
 measured 63.8 ms p95 against a 200 ms budget. Each read compares at most
 4,000 peer answers from 200 candidates.
 
+### Attempts
+
+Measured with 601 simultaneous active attempts and 20 questions per paper.
+
+| Read or save | Median (ms) | 95th percentile (ms) | Budget (ms) |
+|---|---:|---:|---:|
+| Attempt status | 8.8 | 11.2 | 55 |
+| Question delivery and navigation | 9.7 | 13.8 | 65 |
+| Answer autosave | 9.0 | 11.2 | 65 |
+
 ## 3. What was changed and why
 
 | Change | Reason, from the query plan |
