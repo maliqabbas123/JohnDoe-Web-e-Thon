@@ -8,6 +8,7 @@ const tools = [
   ['setup', 'Setup'],
   ['blueprint', 'Paper blueprint'],
   ['enrolment', 'Enrolment and retakes'],
+  ['live', 'Live monitor'],
   ['grading', 'Grading'],
 ] as const
 

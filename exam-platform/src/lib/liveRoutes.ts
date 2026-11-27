@@ -14,7 +14,7 @@ const liveDashboardRoutes: RegExp[] = [
   new RegExp(`^/examiner/questions/${segment}/edit$`),
   // Examiner exam tools
   new RegExp(
-    `^/examiner/exams/${segment}/(setup|blueprint|enrolment|grading)$`,
+    `^/examiner/exams/${segment}/(setup|blueprint|enrolment|live|grading)$`,
   ),
   new RegExp(`^/examiner/exams/${segment}/submissions/${segment}$`),
   // Candidate workspace, preferences and exam lobby

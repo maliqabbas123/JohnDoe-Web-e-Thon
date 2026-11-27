@@ -14,8 +14,14 @@ import {
 import { serverNow } from '../../context/MockStoreContext'
 
 import { ExamHeader, Missing, useExam } from './shared'
+import { isLive } from '@/lib/api'
+import { LiveExamMonitor } from './LiveExamMonitor'
 
 export function ExamLiveMonitorPage() {
+  return isLive ? <LiveExamMonitor /> : <DemoExamLiveMonitorPage />
+}
+
+function DemoExamLiveMonitorPage() {
   const { exam, attempts, state, update, toast } = useExam(),
     [selected, set] = useState(''),
     [message, setMessage] = useState('')
