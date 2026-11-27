@@ -47,6 +47,7 @@ const sections = [
   ['Blueprint', 'blueprint'],
   ['Live monitor', 'live'],
   ['Results', 'results'],
+  ['Reports', 'reports'],
   ['Integrity', 'integrity'],
   ['Fairness', 'fairness'],
   ['Disruptions', 'disruptions'],

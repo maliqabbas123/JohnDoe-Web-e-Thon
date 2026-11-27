@@ -1,6 +1,12 @@
 'use client'
 
-import { Badge, DataTable, Heading, Panel } from '../../components/shared'
+import {
+  Badge,
+  Button,
+  DataTable,
+  Heading,
+  Panel,
+} from '../../components/shared'
 import { useStore } from '../../context/MockStoreContext'
 
 export function CandidateDisputesPage() {
@@ -19,6 +25,7 @@ export function CandidateDisputesPage() {
             'Status',
             'Claim',
             'Resolution notes',
+            'Action',
           ]}
           filters={{
             Status: ['Open', 'Under Review', 'Resolved', 'Escalated'],
@@ -37,6 +44,9 @@ export function CandidateDisputesPage() {
                   <Badge>{d.status}</Badge>,
                   d.claim,
                   d.notes || 'Awaiting examiner response',
+                  <Button secondary to={'/candidate/disputes/' + d.id}>
+                    View dispute
+                  </Button>,
                 ],
               }
             })}

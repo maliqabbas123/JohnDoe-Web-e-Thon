@@ -64,6 +64,7 @@ export interface Attempt {
   scratch: string
   incidents: Incident[]
   grace: number
+  accommodationMinutes?: number
   review: string
   pending: boolean
   variant: string
@@ -81,16 +82,36 @@ export interface Dispute {
   question: string
   type: string
   claim: string
+  evidence?: string
   status: string
   notes: string
-  revisions: { at: number; summary: string }[]
+  revisions: { at: number; summary: string; status?: string }[]
 }
+export interface CohortReport {
+  id: string
+  exam: string
+  title: string
+  generatedAt: number
+  total: number
+  scores: { name: string; points: number }[]
+}
+
+export interface Accommodation {
+  exam: string
+  user: string
+  extraMinutes: number
+  approvedAt: number
+  note: string
+}
+
 export interface State {
   users: User[]
   exams: Exam[]
   questions: Question[]
   attempts: Attempt[]
   disputes: Dispute[]
+  cohortReports?: CohortReport[]
+  accommodations?: Accommodation[]
   audit: Incident[]
   messages: { exam: string; body: string; at: number }[]
   outages: { cohort: string; minutes: number; exam: string; at: number }[]

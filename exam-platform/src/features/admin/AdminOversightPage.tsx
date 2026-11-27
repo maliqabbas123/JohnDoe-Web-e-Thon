@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Badge, DataTable, Heading, Panel, Tabs } from '../../components/shared'
 import { date, useStore } from '../../context/MockStoreContext'
 
@@ -33,7 +34,7 @@ export function AdminOversightPage() {
                   search: e.title + ' ' + e.subject,
                   filters: { Status: e.status },
                   cells: [
-                    e.title,
+                    <Link href={'/admin/exams/' + e.id}>{e.title}</Link>,
                     state.users.find((u) => u.id === e.owner)?.name,
                     <Badge>{e.status}</Badge>,
                     date(e.date),
