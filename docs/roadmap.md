@@ -21,7 +21,8 @@ What is built, what is left, and how the remaining work is split so that three p
 | Reports and verification | Not started | 4.2, 4.6 |
 | Monitoring, disruptions, announcements | Not started | 3.6, 5.3 |
 | Integrity analysis | Not started | 5.1 |
-| Bulk import | Not started | 4.4 |
+| Question import | Built | 4.4 |
+| Candidate import | Not started | 4.4 |
 | Workspace preferences | Not started | 4.7 |
 | Deployment | Not started | 07 |
 

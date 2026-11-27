@@ -1,0 +1,4 @@
+topicId,type,difficulty,text,explanation,defaultMarks,options
+replace-with-your-topic-id,SINGLE_CHOICE,EASY,"What is 2 + 2?",,1,"[{""text"":""3"",""isCorrect"":false},{""text"":""4"",""isCorrect"":true}]"
+replace-with-your-topic-id,MULTIPLE_SELECT,MEDIUM,"Select the even numbers.",,1.5,"[{""text"":""2"",""isCorrect"":true},{""text"":""3"",""isCorrect"":false},{""text"":""4"",""isCorrect"":true}]"
+replace-with-your-topic-id,WRITTEN,HARD,"Explain how you solved it, and show your working.",,2,

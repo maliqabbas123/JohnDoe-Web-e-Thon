@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Measured for the administrator endpoints and the question bank. Each module adds its reads to the measurement suite |
+| Status | Measured for the administrator endpoints, question bank and import history. Each module adds its reads to the measurement suite |
 | Related | [Testing](testing.md), [Data model](data-model.md) |
 
 ## 1. Approach
@@ -53,6 +53,15 @@ Measured with 152,000 questions across 301 examiners, where the signed-in examin
 | One question | 2.1 | 3.9 |
 
 No index was added. Every query is scoped to the owner, and the existing index on `Question (ownerId, topicId, difficulty)` narrows it to that examiner's rows before anything else happens, so the size of the platform does not affect an examiner's reads.
+
+### Question import history
+
+Measured with 20,500 import jobs across 201 examiners, including 500 for the signed-in examiner. Each page includes row errors and uses the existing `ImportJob (userId, createdAt)` index for the owner and cursor bounds.
+
+| Read | Median | 95th percentile | 95th percentile budget |
+|---|---|---|---|
+| Import jobs, first page | 4.6 ms | 5.7 ms | 30 ms |
+| Import jobs, after 400 entries with 50 per page | 5.4 ms | 7.0 ms | 30 ms |
 
 ## 3. What was changed and why
 
