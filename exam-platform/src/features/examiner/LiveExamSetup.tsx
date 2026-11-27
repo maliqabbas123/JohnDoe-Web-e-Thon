@@ -311,6 +311,7 @@ function ExamSetupEditor({
           Paper blueprint
         </Link>
         <a href="#exam-review">Review and publication</a>
+        <Link href={page + '/enrolment'}>Enrolment and retakes</Link>
       </nav>
       {feedback && (
         <Panel>
