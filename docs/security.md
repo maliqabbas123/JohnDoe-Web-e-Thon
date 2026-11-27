@@ -92,7 +92,7 @@ These protect the exam itself and go beyond conventional application security.
 | One attempt in progress; attempt limit | Server and database | No |
 | One active session; new sign-in ends the old one | Server | No |
 | Desktop-only check when an attempt starts | Server (best effort, from request headers) | With effort |
-| Answer speed, typing counts versus answer length, similarity | Server analysis | No |
+| Answer speed, typing counts versus answer length, similarity | Server analysis on the examiner's first and subsequent integrity reads for a closed attempt | No |
 | Honeypot marker for AI assistants | Server inserts and checks | Only by noticing and removing it |
 | Visible notice that AI assistants must not answer | Server inserts | No |
 | Copy, cut, paste, right-click and shortcut blocking | Exam page | Yes, with developer tools |

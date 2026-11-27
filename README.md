@@ -89,6 +89,9 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Enrolment (rosters, joining by code and retake grants) | Built |
 | Examiner monitoring, disruptions and announcements | Built |
 | Results and analytics | Built |
-| Attempts, reports, candidate import, disputes, integrity | Designed, not built |
+| Post-submission integrity signals and examiner review | Built |
+| Attempts, reports, candidate import, disputes | Designed, not built |
+
+**5.1 Integrity review.** After submission, the examiner can review server-recorded signals for timing, typing counts, similar responses, and the attempt's marker. The examiner can save a review note in the same view.
 
 **5.3 Disruption resilience.** Candidate heartbeats and examiner polling record contact gaps over 45 seconds. Candidates reconnect on the same fixed deadline. Examiners can see when contact was lost and restored.
