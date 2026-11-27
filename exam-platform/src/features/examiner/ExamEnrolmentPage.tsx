@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Unavailable } from '@/components/auth/Unavailable'
@@ -22,6 +21,7 @@ import {
   localDateInput,
   type ExamDetail,
 } from './examApi'
+import { LiveExamNav } from './LiveExamNav'
 
 interface Candidate {
   id: string
@@ -267,7 +267,6 @@ function RetakeDialog({
 
 function ExamRoster({ id }: { id: string }) {
   const endpoint = examApiPath(id)
-  const page = examPagePath(id)
   const roster = useExamList<RosterEntry>(endpoint + '/enrollments')
   const grants = useExamList<RetakeGrant>(endpoint + '/retake-grants')
   const [title, setTitle] = useState('')
@@ -364,13 +363,7 @@ function ExamRoster({ id }: { id: string }) {
           </Button>
         }
       />
-      <nav className="exam-nav" aria-label="Examination tools">
-        <Link href={page + '/setup'}>Setup</Link>
-        <Link href={page + '/blueprint'}>Paper blueprint</Link>
-        <Link href={page + '/enrolment'} aria-current="page">
-          Enrolment and retakes
-        </Link>
-      </nav>
+      <LiveExamNav id={id} current="enrolment" />
       {notice && <p role="status">{notice}</p>}
       {error && <EnrolmentError message={error} />}
       <Panel title="Enrol candidates">
