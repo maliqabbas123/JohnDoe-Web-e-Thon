@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.13.0
+  version: 0.14.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -89,6 +89,8 @@ tags:
     description: Review and grade closed submissions for an examiner's own exam.
   - name: Exams
     description: Exam configuration and publication. Examiner only.
+  - name: Integrity
+    description: Signals for examiner review on a closed attempt.
   - name: Monitoring
     description: Candidate contact and signals, and the exam owner's live view and announcements.
   - name: Workspace
@@ -1773,6 +1775,93 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /attempts/{id}/integrity:
+    get:
+      tags: [Integrity]
+      operationId: getAttemptIntegrity
+      summary: Read integrity signals for a closed attempt
+      description: |
+        Examiner only, for an exam they own. The read analyzes the frozen
+        submission and records newly observed server signals once.
+
+        **UI notes:** Show the level and counts as signals for review. Use
+        nextCursor to page signals. Totals cover the whole attempt. A live
+        attempt returns 409. Sandbox and foreign attempts return 404.
+
+        Fast answers are evaluated on hard objective questions within five
+        seconds. Typing-count comparisons require a written answer with
+        length and typing evidence and the clipboard switch enabled.
+        Similarity samples up to 200 other candidates' latest closed attempts
+        and 4,000 answer records, comparing the same frozen questions.
+        Written comparisons use the first 2,000 characters and require at least
+        80 characters and 12 words. Matching wrong selections require at least
+        three common questions. The response omits answer text and markers.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Signals for review and the saved examiner note.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/IntegritySummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/integrity/review:
+    put:
+      tags: [Integrity]
+      operationId: saveAttemptIntegrityReview
+      summary: Save an integrity review note
+      description: |
+        Examiner only, for a closed attempt in their own exam.
+
+        **UI notes:** Send a note of up to 2,000 characters. The response
+        records the author and server time. A new save replaces the note.
+        Review notes are private to the examiner.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties:
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        "200":
+          description: Saved note and reviewer.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/IntegrityReview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /exams/{id}/grading:
     get:
       tags: [Grading]
@@ -3058,6 +3147,47 @@ components:
           required: [type]
           properties:
             type: { type: string, enum: [FULLSCREEN_EXIT, CONTEXT_MENU, PRINT_SCREEN, EXTRA_DISPLAY] }
+
+    IntegrityReview:
+      type: object
+      required: [note, reviewedById, reviewedAt]
+      properties:
+        note: { type: string }
+        reviewedById: { type: [string, "null"] }
+        reviewedAt: { $ref: "#/components/schemas/Instant" }
+
+    IntegritySummary:
+      type: object
+      required: [attemptId, counts, level, review, signals, nextCursor]
+      properties:
+        attemptId: { type: string }
+        counts:
+          type: object
+          required: [LOW, MEDIUM, HIGH]
+          properties:
+            LOW: { type: integer, minimum: 0 }
+            MEDIUM: { type: integer, minimum: 0 }
+            HIGH: { type: integer, minimum: 0 }
+        level: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        review:
+          oneOf:
+            - { $ref: "#/components/schemas/IntegrityReview" }
+            - { type: "null" }
+        nextCursor: { type: [string, "null"] }
+        signals:
+          type: array
+          items:
+            type: object
+            required: [id, type, source, severity, details, createdAt, position, label]
+            properties:
+              id: { type: string }
+              type: { type: string }
+              source: { type: string, enum: [CLIENT, SERVER] }
+              severity: { type: string, enum: [LOW, MEDIUM, HIGH] }
+              details: {}
+              createdAt: { $ref: "#/components/schemas/Instant" }
+              position: { type: [integer, "null"] }
+              label: { type: string }
 
     UserActivity:
       type: object

@@ -20,7 +20,7 @@ What is built, what is left, and how the remaining work is split so that three p
 | Disputes | Not started | 5.4 |
 | Reports and verification | Not started | 4.2, 4.6 |
 | Monitoring, disruptions, announcements | Built | 3.6, 5.3 |
-| Integrity analysis | Not started | 5.1 |
+| Integrity analysis | Built | 5.1 |
 | Question import | Built | 4.4 |
 | Candidate import | Not started | 4.4 |
 | Workspace preferences | Built | 4.7 |

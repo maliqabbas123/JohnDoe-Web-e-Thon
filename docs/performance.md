@@ -104,6 +104,12 @@ Measured with 500 active attempts, 20 frozen questions per attempt, and
 | `GET /exams/{id}/monitor` | 12.1 ms | 16.5 ms | 80 ms |
 | `GET /exams/{id}/announcements` | 6.8 ms | 8.3 ms | 30 ms |
 
+### Examiner integrity
+
+With 150 closed attempts and ten answers each, `GET /attempts/{id}/integrity`
+measured 63.8 ms p95 against a 200 ms budget. Each read compares at most
+4,000 peer answers from 200 candidates.
+
 ## 3. What was changed and why
 
 | Change | Reason, from the query plan |
