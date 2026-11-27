@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { isLive } from '@/lib/api'
+import { LiveAdminDashboardPage } from './LiveAdminDashboardPage'
 import { useState } from 'react'
 import {
   Badge,
@@ -17,6 +19,10 @@ import type { Role, User } from '../../types'
 import { roles, UserEditor } from './shared'
 
 export function AdminDashboardPage() {
+  return isLive ? <LiveAdminDashboardPage /> : <DemoAdminDashboardPage />
+}
+
+function DemoAdminDashboardPage() {
   const { state, update, toast } = useStore(),
     [edit, setEdit] = useState<User | null | undefined>(),
     [importing, setImport] = useState(false)

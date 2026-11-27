@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { isLive } from '@/lib/api'
+import { LiveAdminUserDetailPage } from './LiveAdminUserDetailPage'
 import { useParams } from 'next/navigation'
 import { useState } from 'react'
 import { Badge, Button, Heading, Panel } from '../../components/shared'
@@ -9,6 +11,10 @@ import { date, serverNow, useStore } from '../../context/MockStoreContext'
 import { UserEditor } from './shared'
 
 export function AdminUserDetailPage() {
+  return isLive ? <LiveAdminUserDetailPage /> : <DemoAdminUserDetailPage />
+}
+
+function DemoAdminUserDetailPage() {
   const { userId } = useParams<{ userId: string }>(),
     { state, update, toast, user } = useStore(),
     [edit, set] = useState(false)
