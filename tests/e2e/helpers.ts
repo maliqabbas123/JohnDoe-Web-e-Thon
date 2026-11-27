@@ -40,8 +40,16 @@ export function tempEmail(label = "user"): string {
   return `${TEMP_PREFIX}${label}-${randomBytes(5).toString("hex")}@exam.test`;
 }
 
+// Removes every temporary account together with what it owns. Content is
+// deleted first because the database refuses to delete a user who still
+// owns exams, questions or topics.
 export async function removeTempUsers(): Promise<void> {
-  await sql(`DELETE FROM "User" WHERE email LIKE $1`, [`${TEMP_PREFIX}%`]);
+  const owners = `SELECT id FROM "User" WHERE email LIKE $1`;
+  const pattern = [`${TEMP_PREFIX}%`];
+  await sql(`DELETE FROM "Exam" WHERE "ownerId" IN (${owners})`, pattern);
+  await sql(`DELETE FROM "Question" WHERE "ownerId" IN (${owners})`, pattern);
+  await sql(`DELETE FROM "Topic" WHERE "ownerId" IN (${owners})`, pattern);
+  await sql(`DELETE FROM "User" WHERE email LIKE $1`, pattern);
 }
 
 export type ApiResponse = {

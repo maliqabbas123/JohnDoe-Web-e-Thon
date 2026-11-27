@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Measured for the administrator endpoints. Each module adds its reads to the measurement suite |
+| Status | Measured for the administrator endpoints and the question bank. Each module adds its reads to the measurement suite |
 | Related | [Testing](testing.md), [Data model](data-model.md) |
 
 ## 1. Approach
@@ -37,6 +37,22 @@ Measured on a developer laptop with PostgreSQL 16 in Docker; times are for the w
 | Audit log, by actor | 2.0 | 1.6 | 1.9 |
 | Audit log, by record | 2.3 | 1.6 | 1.9 |
 | Audit log, by time range | 14.1 | 1.7 | 2.1 |
+
+### Question bank
+
+Measured with 152,000 questions across 301 examiners, where the signed-in examiner owns 2,000.
+
+| Read | Median | 95th percentile |
+|---|---|---|
+| Topics with counts per difficulty | 2.6 | 6.6 |
+| Question list, first page | 3.3 | 5.4 |
+| Question list, 100 per page | 4.8 | 7.6 |
+| Question list, last page | 3.2 | 4.8 |
+| Question list, by topic and difficulty | 2.6 | 3.5 |
+| Question search | 3.4 | 4.6 |
+| One question | 2.1 | 3.9 |
+
+No index was added. Every query is scoped to the owner, and the existing index on `Question (ownerId, topicId, difficulty)` narrows it to that examiner's rows before anything else happens, so the size of the platform does not affect an examiner's reads.
 
 ## 3. What was changed and why
 

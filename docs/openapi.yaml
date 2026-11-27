@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.5.0
+  version: 0.6.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -83,6 +83,8 @@ tags:
     description: Sign-up, sign-in, sign-out and the current user.
   - name: Users
     description: Account management. Administrator only.
+  - name: Question bank
+    description: An examiner's reusable topics and questions. Examiner only; each examiner sees only their own.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -509,6 +511,327 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /topics:
+    get:
+      tags: [Question bank]
+      operationId: listTopics
+      summary: List your topics with question counts
+      description: |
+        Examiner only. Every topic in the examiner's bank, in name order, with
+        how many active questions it holds at each difficulty.
+
+        **UI notes:**
+        - Not paged; an examiner has a modest number of topics.
+        - `byDifficulty` counts exclude archived questions. Use these counts
+          when building an exam's difficulty mix, to show whether the bank has
+          enough questions.
+        - Administrators and candidates receive 403: the question bank is
+          examination content.
+      responses:
+        "200":
+          description: The examiner's topics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TopicWithCounts" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Question bank]
+      operationId: createTopic
+      summary: Create a topic
+      description: |
+        Examiner only.
+
+        **UI notes:** names are unique within an examiner's bank, ignoring
+        letter case and surrounding spaces; a duplicate returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TopicRequest" }
+      responses:
+        "201":
+          description: The created topic.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Topic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: The examiner already has a topic with this name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /topics/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/TopicId" }
+    patch:
+      tags: [Question bank]
+      operationId: renameTopic
+      summary: Rename a topic
+      description: |
+        Examiner only, own topics only.
+
+        **UI notes:** another examiner's topic returns 404, the same as one
+        that does not exist.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TopicRequest" }
+      responses:
+        "200":
+          description: The renamed topic.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Topic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The examiner already has a topic with this name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [Question bank]
+      operationId: deleteTopic
+      summary: Delete an empty topic
+      description: |
+        Examiner only, own topics only.
+
+        **UI notes:** a topic that holds any question, archived or not, cannot
+        be deleted and returns 409. Offer to move the questions first.
+      responses:
+        "204":
+          description: Deleted. No body.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The topic still holds questions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /questions:
+    get:
+      tags: [Question bank]
+      operationId: listQuestions
+      summary: List your questions
+      description: |
+        Examiner only. Newest first. Includes the answer key (`isCorrect`).
+
+        **UI notes:**
+        - Archived questions are left out unless `isArchived=true` is sent;
+          that returns only archived ones. Build "Active" and "Archived" tabs.
+        - `q` searches the question text as literal text, ignoring case.
+          Debounce the search box.
+        - Filters combine: all must match.
+        - `usedInExams` tells you how many exams use the question. Show it
+          before the examiner edits or removes one.
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: topicId
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: type
+          in: query
+          schema: { $ref: "#/components/schemas/QuestionType" }
+        - name: difficulty
+          in: query
+          schema: { $ref: "#/components/schemas/Difficulty" }
+        - name: isArchived
+          in: query
+          description: Send `true` to list archived questions instead of active ones.
+          schema: { type: string, enum: ["true", "false"], default: "false" }
+        - name: q
+          in: query
+          description: Text to find in the question.
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: One page of questions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Question" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Question bank]
+      operationId: createQuestion
+      summary: Create a question
+      description: |
+        Examiner only. Options are created with the question, in the order sent.
+
+        **UI notes, answer-key rules by type:**
+        - `SINGLE_CHOICE`: 2 to 10 options, exactly one correct.
+        - `MULTIPLE_SELECT`: 2 to 10 options, at least one correct.
+        - `WRITTEN`: no options. Omit `options` or send an empty array.
+        - Option texts must differ from each other, ignoring letter case.
+        - A broken rule returns 422 with `path: "options"`. A problem inside
+          one option uses a path such as `options.0.text`.
+
+        **Other notes:**
+        - `difficulty` is required. Make the examiner choose; do not default it.
+        - `defaultMarks` is a number from 0.25 to 1000 with at most two decimal
+          places. Send a number, not a string.
+        - `topicId` must be one of the examiner's own topics.
+        - `explanation` is the model answer or marking guide. It is for the
+          examiner and is never shown to candidates by this endpoint.
+        - The type cannot be changed later.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateQuestionRequest" }
+            example:
+              topicId: tpc_123
+              type: SINGLE_CHOICE
+              difficulty: MEDIUM
+              text: What is 2 + 2?
+              defaultMarks: 2
+              options:
+                - { text: "3", isCorrect: false }
+                - { text: "4", isCorrect: true }
+      responses:
+        "201":
+          description: The created question.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /questions/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/QuestionId" }
+    get:
+      tags: [Question bank]
+      operationId: getQuestion
+      summary: Read one question
+      description: |
+        Examiner only, own questions only. Includes the answer key.
+
+        **UI notes:** another examiner's question returns 404. Archived
+        questions can still be read.
+      responses:
+        "200":
+          description: The question.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Question" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Question bank]
+      operationId: updateQuestion
+      summary: Edit, archive or restore a question
+      description: |
+        Examiner only, own questions only. Send only the fields to change.
+
+        **UI notes:**
+        - Sending `options` replaces the whole set; option ids change. Always
+          send every option, not just the edited one. The answer-key rules of
+          the question's type apply.
+        - `type` cannot be changed; sending it returns 422. Create a new
+          question instead.
+        - Send `explanation: null` to clear it.
+        - `isArchived: true` archives, `false` restores.
+        - Editing never changes an attempt that has already started: each
+          attempt keeps its own copy of the question. Edits do reach exams
+          that have not started yet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateQuestionRequest" }
+      responses:
+        "200":
+          description: The updated question.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Question" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [Question bank]
+      operationId: removeQuestion
+      summary: Delete an unused question, or archive a used one
+      description: |
+        Examiner only, own questions only.
+
+        **UI notes:** read `data.outcome`. `DELETED` means the question was
+        never used and is gone. `ARCHIVED` means an exam or an attempt uses
+        it, so it was archived instead and can be restored. Tell the examiner
+        which happened. This returns 200 with a body, not 204.
+      responses:
+        "200":
+          description: What happened to the question.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [outcome]
+                    properties:
+                      outcome: { type: string, enum: [DELETED, ARCHIVED] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -653,6 +976,18 @@ components:
       in: path
       required: true
       description: The user's id.
+      schema: { type: string, maxLength: 64 }
+    TopicId:
+      name: id
+      in: path
+      required: true
+      description: The topic's id.
+      schema: { type: string, maxLength: 64 }
+    QuestionId:
+      name: id
+      in: path
+      required: true
+      description: The question's id.
       schema: { type: string, maxLength: 64 }
 
   responses:
@@ -937,6 +1272,129 @@ components:
           required: [failedSignInsLast24Hours]
           properties:
             failedSignInsLast24Hours: { type: integer }
+
+    QuestionType:
+      type: string
+      enum: [SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN]
+      description: One correct option, one or more correct options, or a written response graded by the examiner.
+
+    Difficulty:
+      type: string
+      enum: [EASY, MEDIUM, HARD]
+      description: The examiner's label. Used to build papers of equal difficulty.
+
+    Marks:
+      type: number
+      minimum: 0.25
+      maximum: 1000
+      multipleOf: 0.01
+      description: A number with at most two decimal places.
+
+    Topic:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+
+    TopicWithCounts:
+      allOf:
+        - { $ref: "#/components/schemas/Topic" }
+        - type: object
+          required: [questionCount, byDifficulty]
+          properties:
+            questionCount: { type: integer, description: Active questions in the topic. }
+            byDifficulty:
+              type: object
+              required: [EASY, MEDIUM, HARD]
+              properties:
+                EASY: { type: integer }
+                MEDIUM: { type: integer }
+                HARD: { type: integer }
+
+    TopicRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+
+    QuestionOption:
+      type: object
+      required: [id, text, isCorrect, position]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        isCorrect: { type: boolean, description: Part of the answer key. Examiner only. }
+        position: { type: integer, minimum: 1, description: Authoring order, starting at 1. }
+
+    OptionInput:
+      type: object
+      additionalProperties: false
+      required: [text, isCorrect]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 1000 }
+        isCorrect: { type: boolean }
+
+    Question:
+      type: object
+      required: [id, type, difficulty, text, explanation, defaultMarks, isArchived, createdAt, updatedAt, topic, options, usedInExams]
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        text: { type: string, description: May contain any characters. Escape it when rendering. }
+        explanation: { type: [string, "null"], description: Model answer or marking guide. }
+        defaultMarks: { $ref: "#/components/schemas/Marks" }
+        isArchived: { type: boolean }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        updatedAt: { $ref: "#/components/schemas/Instant" }
+        topic:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        options:
+          type: array
+          description: In authoring order. Empty for a written-response question.
+          items: { $ref: "#/components/schemas/QuestionOption" }
+        usedInExams: { type: integer, description: Number of exams whose pool includes this question. }
+
+    CreateQuestionRequest:
+      type: object
+      additionalProperties: false
+      required: [topicId, type, difficulty, text, defaultMarks]
+      properties:
+        topicId: { type: string, maxLength: 64 }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        text: { type: string, minLength: 1, maxLength: 5000 }
+        explanation: { type: [string, "null"], maxLength: 5000 }
+        defaultMarks: { $ref: "#/components/schemas/Marks" }
+        options:
+          type: array
+          maxItems: 10
+          description: Required for choice questions (2 to 10). Omit for written-response questions.
+          items: { $ref: "#/components/schemas/OptionInput" }
+
+    UpdateQuestionRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        topicId: { type: string, maxLength: 64 }
+        difficulty: { $ref: "#/components/schemas/Difficulty" }
+        text: { type: string, minLength: 1, maxLength: 5000 }
+        explanation: { type: [string, "null"], maxLength: 5000 }
+        defaultMarks: { $ref: "#/components/schemas/Marks" }
+        options:
+          type: array
+          maxItems: 10
+          description: Replaces the whole option set.
+          items: { $ref: "#/components/schemas/OptionInput" }
+        isArchived: { type: boolean }
 
     UserActivity:
       type: object

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users and Admin. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin and Question bank. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -69,9 +69,10 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `DELETE /users/{id}/sign-in-lock` | A | Lift a lockout from failed sign-ins |
 | Admin | `GET /admin/overview` | A | Platform counts: users, exams, attempts, disputes, sessions, failed sign-ins |
 | | `GET /admin/audit-logs` | A | Audit log with filters by actor, action, record and time range; cursor paging |
-| Questions | `GET /topics`, `POST /topics` | E | Topics in own bank |
+| Questions | `GET /topics`, `POST /topics` | E | Topics in own bank, with question counts per difficulty |
+| | `PATCH /topics/{id}`, `DELETE /topics/{id}` | E | Rename; delete when empty |
 | | `GET /questions`, `POST /questions` | E | List with filters; create |
-| | `GET /questions/{id}`, `PATCH /questions/{id}`, `DELETE /questions/{id}` | E | Read, edit, archive |
+| | `GET /questions/{id}`, `PATCH /questions/{id}`, `DELETE /questions/{id}` | E | Read; edit, archive or restore; delete if unused, otherwise archive |
 | Exams | `GET /exams`, `POST /exams` | E | Own exams; create |
 | | `GET /exams/{id}`, `PATCH /exams/{id}` | E | Read; edit settings |
 | | `PUT /exams/{id}/questions` | E | Set the question pool |
