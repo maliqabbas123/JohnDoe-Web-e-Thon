@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences and Enrolment. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences, Enrolment and Monitoring. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -91,10 +91,10 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `GET /attempts/{id}/questions/{position}` | C | One question, without the answer key |
 | | `PUT /attempts/{id}/answers/{position}` | C | Save an answer or review flag |
 | | `PUT /attempts/{id}/scratchpad` | C | Save rough work |
-| | `POST /attempts/{id}/heartbeat` | C | Contact signal; returns server time and announcements |
 | | `POST /attempts/{id}/submit` | C | Submit |
 | | `POST /exams/{id}/sandbox`, `DELETE /exams/{id}/sandbox` | E | Preview as a candidate; reset |
-| Monitoring | `GET /exams/{id}/monitor` | E | Live attempts, progress, connection, incidents |
+| Monitoring | `POST /attempts/{id}/heartbeat` | C | Contact signal, fixed deadline and new announcements |
+| | `GET /exams/{id}/monitor` | E | Attempt progress, connection, disruption and signal counts |
 | | `POST /attempts/{id}/incidents` | C | Report exam-page events |
 | | `GET /exams/{id}/announcements`, `POST /exams/{id}/announcements` | E | List; send |
 | Grading | `GET /exams/{id}/grading` | E | Written answers waiting for a mark, cursor-paged |
@@ -133,7 +133,7 @@ The frontend's exam page is responsible for the following. The server works with
 | On each answer change, debounced | `PUT /attempts/{id}/answers/{position}` with an increasing `revision` and the typing counts |
 | On each event in 3.2 | `POST /attempts/{id}/incidents` |
 
-Use the `serverTime` and `deadlineAt` from responses to run the countdown. Never use the device clock for the deadline.
+Use `serverTime` and `deadlineAt` to run the countdown. Retain the heartbeat's `announcementCursor` per attempt and send it as `cursor` on the next call. Fetch another page immediately when `hasMoreAnnouncements` is true. Stop heartbeats when the status leaves `IN_PROGRESS`.
 
 ### 3.2 Incident events
 

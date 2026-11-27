@@ -93,6 +93,17 @@ Measured with 29,150 enrolments across 250 exams. The largest roster held 4,001 
 | Candidate exams, first 100 | 16.3 | 19.1 | 85 |
 | Candidate exam details | 7.9 | 9.3 | 50 |
 
+### Examiner monitoring
+
+Measured with 500 active attempts, 20 frozen questions per attempt, and
+200 announcements. The monitor reads the first page of 100 attempts.
+
+| Read | Median | 95th percentile | 95th percentile budget |
+|---|---|---|---|
+| `POST /attempts/{id}/heartbeat` | 9.1 ms | 11.0 ms | 35 ms |
+| `GET /exams/{id}/monitor` | 12.1 ms | 16.5 ms | 80 ms |
+| `GET /exams/{id}/announcements` | 6.8 ms | 8.3 ms | 30 ms |
+
 ## 3. What was changed and why
 
 | Change | Reason, from the query plan |
