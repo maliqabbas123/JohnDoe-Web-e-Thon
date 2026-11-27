@@ -39,7 +39,7 @@ Lists add paging information:
 | 403 | `FORBIDDEN` | Role, ownership or origin check failed |
 | 404 | `NOT_FOUND` | Missing, or not visible to this user |
 | 409 | `CONFLICT` | State conflict: duplicate, attempt closed, window not open |
-| 413 | `PAYLOAD_TOO_LARGE` | Body or file over the limit |
+| 413 | `PAYLOAD_TOO_LARGE` | JSON body over 64 KB, or file over the limit |
 | 422 | `VALIDATION_FAILED` | Input failed validation; `details` lists fields |
 | 429 | `RATE_LIMITED` | Too many requests; see `Retry-After` |
 | 500 | `INTERNAL` | Unexpected error; no detail is returned |

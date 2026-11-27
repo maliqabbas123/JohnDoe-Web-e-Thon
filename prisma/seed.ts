@@ -3,15 +3,8 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type { Role } from "../src/generated/prisma/enums";
 import { hashPassword } from "../src/server/auth/password";
-
-const TEST_ACCOUNTS: { email: string; name: string; role: Role; password: string }[] = [
-  { email: "admin@exam.test", name: "Ada Admin", role: "ADMIN", password: "Admin-Demo-2026" },
-  { email: "examiner@exam.test", name: "Evan Examiner", role: "EXAMINER", password: "Examiner-Demo-2026" },
-  { email: "candidate@exam.test", name: "Cara Candidate", role: "CANDIDATE", password: "Candidate-Demo-2026" },
-  { email: "candidate2@exam.test", name: "Carl Candidate", role: "CANDIDATE", password: "Candidate-Demo-2026" },
-];
+import { TEST_ACCOUNTS } from "./test-accounts";
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
@@ -19,7 +12,7 @@ async function main() {
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   try {
-    for (const account of TEST_ACCOUNTS) {
+    for (const account of Object.values(TEST_ACCOUNTS)) {
       const passwordHash = await hashPassword(account.password);
       const data = { name: account.name, role: account.role, passwordHash, isActive: true };
       await db.user.upsert({

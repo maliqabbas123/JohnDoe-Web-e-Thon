@@ -20,15 +20,20 @@ const publicUser = {
   updatedAt: true,
 } satisfies Prisma.UserSelect;
 
+// In a "contains" filter, % and _ are wildcards. A search term is literal
+// text, so they are escaped; otherwise "%" would match every user.
+const literal = (term: string) => term.replace(/[\\%_]/g, "\\$&");
+
 export async function listUsers(filters: ListUsersInput) {
+  const term = filters.q ? literal(filters.q) : undefined;
   const where: Prisma.UserWhereInput = {
     ...(filters.role ? { role: filters.role } : {}),
     ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
-    ...(filters.q
+    ...(term
       ? {
           OR: [
-            { name: { contains: filters.q, mode: "insensitive" } },
-            { email: { contains: filters.q, mode: "insensitive" } },
+            { name: { contains: term, mode: "insensitive" } },
+            { email: { contains: term, mode: "insensitive" } },
           ],
         }
       : {}),

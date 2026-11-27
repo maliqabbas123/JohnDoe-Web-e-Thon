@@ -12,7 +12,10 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "npm run test:unit",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:unit": "tsx --test \"src/**/*.test.ts\"",
+    "test:e2e": "tsx tests/run-e2e.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -37,5 +40,11 @@
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "effect": "3.22.5"
   }
 }

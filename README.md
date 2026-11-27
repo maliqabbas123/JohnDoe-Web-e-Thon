@@ -10,7 +10,7 @@ Web-e-Thon entry (Technoverse 5.0). A full-stack application for creating, condu
 
 ## Local setup
 
-Requirements: Node.js 20 or newer, and Docker.
+Requirements: Node.js 22 or newer, and Docker.
 
 ```bash
 npm install
@@ -35,10 +35,14 @@ The app runs at http://localhost:3000. `GET /api/v1/health` reports whether the 
 | `npm run db:seed` | Create or reset the test accounts |
 | `npm run db:studio` | Browse the database |
 | `npm test` | Run unit tests |
+| `npm run test:e2e` | Build, then run every end-to-end test against a separate test database |
+| `npm run typecheck` | Type-check |
 
 ## Documentation
 
-Design documents are in [`docs/`](docs/README.md): architecture (C4), data model with data dictionary, API, security threat model and decision records.
+Design documents are in [`docs/`](docs/README.md): architecture (C4), data model with data dictionary, API, security threat model, testing and decision records.
+
+Every pull request runs lint, type-check, unit tests, a dependency audit and the full end-to-end suite in CI.
 
 ## Test accounts
 
