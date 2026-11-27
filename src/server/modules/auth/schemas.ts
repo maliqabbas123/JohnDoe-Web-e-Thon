@@ -15,6 +15,19 @@ export const newPasswordSchema = z
   .min(8, "Use at least 8 characters.")
   .max(128, "Use at most 128 characters.");
 
+export const nameSchema = z.string().trim().min(1, "Enter a name.").max(120);
+
+// Sign-up is open to candidates and examiners. An administrator account can
+// never be created this way: the value is not in the accepted set.
+export const signupSchema = z.strictObject({
+  email: emailSchema,
+  name: nameSchema,
+  password: newPasswordSchema,
+  role: z.enum(["CANDIDATE", "EXAMINER"], {
+    error: "Choose candidate or examiner.",
+  }),
+});
+
 export const loginSchema = z.strictObject({
   email: emailSchema,
   password: z.string().min(1, "Enter your password.").max(128),
@@ -30,5 +43,6 @@ export const changePasswordSchema = z
     message: "Choose a password different from the current one.",
   });
 
+export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

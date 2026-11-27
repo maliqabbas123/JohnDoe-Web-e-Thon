@@ -6,17 +6,51 @@ import { db } from "@/server/db";
 import { errors } from "@/server/http/errors";
 import type { ClientInfo } from "@/server/security/client";
 import { clearRateLimit, consumeRateLimit } from "@/server/security/rate-limit";
-import type { ChangePasswordInput, LoginInput } from "./schemas";
+import type { ChangePasswordInput, LoginInput, SignupInput } from "./schemas";
 
 const FIFTEEN_MINUTES = 15 * 60;
 const LOGIN_LIMIT_PER_ACCOUNT = { limit: 5, windowSeconds: FIFTEEN_MINUTES };
 const LOGIN_LIMIT_PER_ADDRESS = { limit: 30, windowSeconds: FIFTEEN_MINUTES };
 const PASSWORD_CHANGE_LIMIT = { limit: 5, windowSeconds: FIFTEEN_MINUTES };
+const SIGNUP_LIMIT_PER_ADDRESS = { limit: 10, windowSeconds: 60 * 60 };
 
 // Verified when the email is unknown, so an unknown email takes as long to
 // reject as a wrong password and cannot be told apart by timing.
 let decoyHash: Promise<string> | undefined;
 const getDecoyHash = () => (decoyHash ??= hashPassword("decoy-password-never-matches"));
+
+// Open registration for candidates and examiners. A new account owns nothing
+// and can see nothing that belongs to anyone else, so no approval is needed.
+// There is no email service, so the address is not verified; the rate limit
+// bounds both bulk registration and probing for existing addresses.
+export async function signup(input: SignupInput, client: ClientInfo) {
+  await consumeRateLimit(`signup:${client.ip ?? "unknown"}`, SIGNUP_LIMIT_PER_ADDRESS);
+
+  const existing = await db.user.findUnique({ where: { email: input.email }, select: { id: true } });
+  if (existing) throw errors.conflict("An account with this email already exists.");
+
+  const passwordHash = await hashPassword(input.password);
+
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: { email: input.email, name: input.name, role: input.role, passwordHash },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    const session = await createSession(user.id, client, tx);
+    await writeAudit(
+      {
+        actorId: user.id,
+        action: "USER_SIGNED_UP",
+        entityType: "User",
+        entityId: user.id,
+        metadata: { role: user.role },
+        ip: client.ip,
+      },
+      tx,
+    );
+    return { user, token: session.token, expiresAt: session.expiresAt };
+  });
+}
 
 export async function login(input: LoginInput, client: ClientInfo) {
   const address = client.ip ?? "unknown";

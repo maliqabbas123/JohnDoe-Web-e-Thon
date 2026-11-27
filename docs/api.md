@@ -51,7 +51,8 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Module | Method and path | Roles | Purpose |
 |---|---|---|---|
 | Platform | `GET /health` | P | Service and database status |
-| Auth | `POST /auth/login` | P | Sign in |
+| Auth | `POST /auth/signup` | P | Register as a candidate or examiner and sign in |
+| | `POST /auth/login` | P | Sign in; the role is read from the account |
 | | `POST /auth/logout` | A E C | Sign out |
 | | `GET /auth/me` | A E C | Current user |
 | | `POST /auth/change-password` | A E C | Change own password |
@@ -69,6 +70,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Enrolment | `GET /exams/{id}/enrollments`, `POST /exams/{id}/enrollments` | E | List; enrol candidates |
 | | `DELETE /exams/{id}/enrollments/{candidateId}` | E | Remove before the first attempt |
 | | `POST /exams/{id}/retake-grants` | E | Give candidates an extra slot |
+| | `POST /me/exams/join` | C | Enrol in an exam with its join code |
 | | `GET /me/exams` | C | Own upcoming, available, in-progress and completed exams |
 | | `GET /me/exams/{id}` | C | Instructions, rules and own status |
 | Attempts | `POST /exams/{id}/attempts` | C | Start (requires accepting the rules) |

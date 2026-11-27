@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { emailSchema, newPasswordSchema } from "../auth/schemas";
+import { emailSchema, nameSchema, newPasswordSchema } from "../auth/schemas";
 
 const roleSchema = z.enum(["ADMIN", "EXAMINER", "CANDIDATE"]);
-const nameSchema = z.string().trim().min(1, "Enter a name.").max(120);
 
 export const createUserSchema = z.strictObject({
   email: emailSchema,

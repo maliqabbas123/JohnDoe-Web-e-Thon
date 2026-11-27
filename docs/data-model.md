@@ -381,7 +381,7 @@ Rules that span rows are enforced in the service layer inside a transaction: dif
 | # | Assumption |
 |---|---|
 | A1 | A user has exactly one role. Someone who is both examiner and candidate needs two accounts |
-| A2 | Accounts are created by an administrator or by an examiner's candidate import. There is no public sign-up |
+| A2 | Anyone may sign up as a candidate or an examiner. Accounts are also created by an administrator or by an examiner's candidate import. An administrator account is never created by sign-up |
 | A3 | A question bank belongs to one examiner and is reused across that examiner's exams. Banks are not shared between examiners |
 | A4 | An exam has one slot that applies to every enrolled candidate. A different time for one candidate is a retake grant |
 | A5 | A candidate may start any time inside the slot and gets the full duration or until the slot ends, whichever is earlier |
@@ -396,6 +396,8 @@ Rules that span rows are enforced in the service layer inside a transaction: dif
 | A14 | No camera, microphone or screen recording is collected |
 | A15 | Exams are taken on a desktop browser. Other screens of the application work on any device |
 | A16 | Supporting documents are small (4 MB) and few, so they are stored in the database |
+| A17 | Each examiner works independently. Organisations, and sharing of banks or exams between examiners, are out of scope |
+| A18 | Email addresses are not verified, because the system uses no email service |
 
 ## 7. Data dictionary
 
