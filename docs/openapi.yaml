@@ -1,0 +1,862 @@
+openapi: 3.1.0
+
+info:
+  title: Secure Examination Management System API
+  version: 0.3.0
+  summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
+  description: |
+    This document covers the endpoints that are **built and tested**. Planned
+    endpoints are listed in `docs/api.md` and are added here as each module ships.
+    A test fails the build if an endpoint exists without being described here.
+
+    # Notes for the UI team
+
+    ## Sending requests
+    - Base URL is `/api/v1`. Send and expect JSON (`Content-Type: application/json`).
+    - Authentication is a session cookie named `exam_session`. It is `HttpOnly`,
+      so JavaScript cannot read it and you never handle a token yourself.
+    - **Always send credentials**: `fetch(url, { credentials: "include" })`, or
+      `withCredentials: true` in axios. Without it the cookie is not sent and
+      every call returns 401.
+    - If the UI is served from a different origin than the API, that origin must
+      be listed in the API's `ALLOWED_ORIGINS` setting. Tell the backend team the
+      exact origin (scheme, host and port, no trailing slash).
+    - State-changing requests (`POST`, `PATCH`, `PUT`, `DELETE`) from an origin
+      that is not allowed are refused with `403 FORBIDDEN`.
+    - Do not cache responses. Every response is sent with `Cache-Control: no-store`.
+
+    ## Signing in and routing by role
+    - There is one sign-in for every user type. Never ask the user for their
+      role at sign-in and never send one. Read `data.user.role` from the
+      response (or from `GET /auth/me`) and route to the matching area:
+      `ADMIN`, `EXAMINER` or `CANDIDATE`.
+    - On page load, call `GET /auth/me`. `200` means signed in; `401` means show
+      the sign-in page.
+    - **One active session per user.** Signing in on another device or browser
+      ends the previous session. Any call can therefore start returning `401`
+      at any time; handle `401` globally by sending the user to sign-in.
+    - A session lasts 8 hours. It also ends at once when an administrator
+      changes the user's role, deactivates them or resets their password.
+    - Hiding a button is not security. The API enforces every permission; a
+      call the user is not allowed to make returns `403`.
+
+    ## Responses
+    - Success: `{ "data": ... }`. Lists add `"meta"` with paging information.
+    - `204` responses have no body. Do not call `.json()` on them.
+    - Failure: `{ "error": { "code", "message", "details"? } }`. Switch on
+      `error.code`, not on the message text. `message` is safe to show to users.
+    - `422 VALIDATION_FAILED` carries `details: [{ path, message }]`. `path` is
+      the field name (for example `email`); show `message` next to that field.
+      An empty `path` means the problem is with the request as a whole, most
+      often a field the API does not accept.
+    - The API rejects fields it does not know. Send only the documented fields.
+    - `429 RATE_LIMITED` carries a `Retry-After` header in seconds. Disable the
+      form and show a countdown rather than retrying.
+    - `500 INTERNAL` never carries detail. Show a generic message.
+
+    ## Data conventions
+    - Every time is ISO 8601 in UTC (`2026-11-28T09:00:00.000Z`). Convert to the
+      viewer's local time for display only, and send UTC back.
+    - For anything timed, use the `serverTime` the API returns, never the
+      device clock.
+    - Ids are opaque strings. Do not parse them or assume a format.
+    - Emails are case-insensitive and returned in lower case.
+    - Text may contain any characters, including `<`, `&` and quotes. The API
+      stores it unchanged; **the UI must escape it when rendering** and must
+      never insert it as raw HTML.
+
+    ## Validating on the client
+    Validate in the UI for a better experience, using the same rules the API
+    enforces (they are in the schemas below). The API validates again and is
+    the authority.
+
+servers:
+  - url: /api/v1
+    description: Same origin as the UI
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+tags:
+  - name: Platform
+    description: Service status.
+  - name: Auth
+    description: Sign-up, sign-in, sign-out and the current user.
+  - name: Users
+    description: Account management. Administrator only.
+  - name: Admin
+    description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
+
+security:
+  - sessionCookie: []
+
+paths:
+  /health:
+    get:
+      tags: [Platform]
+      operationId: getHealth
+      summary: Service and database status
+      description: |
+        Public. Use it for an uptime indicator.
+
+        **UI notes:** `serverTime` is the API's clock in UTC; use it to detect a
+        device clock that is wrong.
+      security: []
+      responses:
+        "200":
+          description: The service can reach its database.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [status, database, serverTime]
+                    properties:
+                      status: { type: string, const: ok }
+                      database: { type: string, const: up }
+                      serverTime: { $ref: "#/components/schemas/Instant" }
+        "503":
+          description: The database is not reachable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/signup:
+    post:
+      tags: [Auth]
+      operationId: signUp
+      summary: Register as a candidate or examiner
+      description: |
+        Public. Creates an active account and signs the user in (the session
+        cookie is set on the response).
+
+        **UI notes:**
+        - Offer exactly two user types, candidate and examiner. An administrator
+          account cannot be registered; sending `ADMIN` returns 422.
+        - On `201`, the user is already signed in. Route by `data.user.role`;
+          do not ask them to sign in again.
+        - `409` means the email is already registered. Offer sign-in instead.
+        - Limited to 10 attempts per hour per network address; expect `429`.
+        - Email addresses are not verified. There is no confirmation email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignUpRequest" }
+            example:
+              email: new.examiner@example.org
+              name: Noor Examiner
+              password: a-long-passphrase
+              role: EXAMINER
+      responses:
+        "201":
+          description: Account created and signed in.
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SessionCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/ForbiddenOrigin" }
+        "409":
+          description: An account with this email already exists.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: signIn
+      summary: Sign in
+      description: |
+        Public. One endpoint for every user type; the role is read from the
+        account.
+
+        **UI notes:**
+        - Send only `email` and `password`. Any other field returns 422.
+        - `401` is returned with the same message for a wrong password, an
+          unknown email and a deactivated account. Show one message, such as
+          "Invalid email or password"; do not tell the user which was wrong.
+        - After 5 failed attempts for one account within 15 minutes, further
+          attempts return `429`, even with the correct password. Show how long
+          to wait from `Retry-After`.
+        - Signing in ends any other session of the same user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignInRequest" }
+            example:
+              email: candidate@exam.test
+              password: Candidate-Demo-2026
+      responses:
+        "200":
+          description: Signed in.
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/SessionCookie" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Invalid email or password, or the account is deactivated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/ForbiddenOrigin" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: signOut
+      summary: Sign out
+      description: |
+        Ends the current session and clears the cookie.
+
+        **UI notes:** no request body. On `204`, clear any user state held in
+        memory and go to the sign-in page. A `401` here means the session had
+        already ended; treat it the same way.
+      responses:
+        "204":
+          description: Signed out. No body.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/ForbiddenOrigin" }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: The signed-in user
+      description: |
+        **UI notes:** call this when the application loads to restore the
+        signed-in state and to decide which area to show. Do not store the role
+        in local storage and trust it later; ask the API.
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/SessionUser" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Change your own password
+      description: |
+        **UI notes:**
+        - A wrong current password returns `422` with `path: currentPassword`.
+        - The new password must differ from the current one.
+        - On `204` the user stays signed in on this device. Their other
+          sessions are ended.
+        - Limited to 5 attempts per 15 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
+      responses:
+        "204":
+          description: Password changed. No body.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/ForbiddenOrigin" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List users
+      description: |
+        Administrator only. Newest first.
+
+        **UI notes:**
+        - `q` searches name and email, ignoring case. It is literal text: `%`
+          and `_` are not wildcards.
+        - A page past the end returns an empty `data` array with the same
+          `total`, not an error.
+        - Debounce the search box; each keystroke is a database query.
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: role
+          in: query
+          schema: { $ref: "#/components/schemas/Role" }
+        - name: isActive
+          in: query
+          description: Send the text `true` or `false`.
+          schema: { type: string, enum: ["true", "false"] }
+        - name: q
+          in: query
+          description: Text to find in the name or email.
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: One page of users.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user
+      description: |
+        Administrator only. Unlike sign-up, this can create an administrator.
+
+        **UI notes:** the administrator chooses the first password and must
+        pass it to the user by some other means; there is no email. `409` means
+        the email is taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserRequest" }
+      responses:
+        "201":
+          description: The created user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: An account with this email already exists.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /users/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/UserId" }
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Read one user
+      description: Administrator only.
+      responses:
+        "200":
+          description: The user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Change a user's name, role, activation or password
+      description: |
+        Administrator only. Send only the fields you want to change; at least
+        one is required. The email cannot be changed.
+
+        **UI notes:**
+        - Changing the role, deactivating, or setting a password signs that
+          user out everywhere at once. Warn the administrator before saving.
+        - An administrator cannot change their own role or deactivate
+          themselves; that returns `409`. Disable those controls on the
+          administrator's own row.
+        - Deactivated users cannot sign in. Set `isActive: true` to restore.
+        - There is no delete. Deactivate instead, so history is kept.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUserRequest" }
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The change would lock the administrator out, or remove the last active administrator.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /admin/overview:
+    get:
+      tags: [Admin]
+      operationId: getPlatformOverview
+      summary: Platform-wide counts
+      description: |
+        Administrator only. Counts for a dashboard: users, examinations,
+        attempts, open disputes, active sessions and failed sign-ins.
+
+        **UI notes:**
+        - Every value is a number except `serverTime`. There are no names or
+          examination details here by design.
+        - `exams.ongoing` and `exams.upcoming` are subsets of `exams.published`.
+          Do not add them to it.
+        - `attempts.interrupted` is a subset of `attempts.inProgress`.
+        - Refresh on a timer of 30 seconds or more, not faster.
+      responses:
+        "200":
+          description: Current counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/PlatformOverview" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      operationId: listAuditLogs
+      summary: Audit log
+      description: |
+        Administrator only. A read-only record of sensitive actions, newest
+        first. Entries cannot be created, changed or removed through the API.
+
+        **UI notes:**
+        - `actor` is `null` for actions with no signed-in user, such as a
+          failed sign-in for an unknown email.
+        - `metadata` differs by action. Render it as key and value pairs rather
+          than assuming fields. It never contains a password.
+        - `from` and `to` must be full ISO 8601 times **with a time zone**
+          (`2026-11-27T00:00:00Z` or `...+05:00`). A date alone returns 422.
+        - `action` is matched exactly, ignoring case.
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: actorId
+          in: query
+          description: Id of the user who performed the action.
+          schema: { type: string, maxLength: 64 }
+        - name: action
+          in: query
+          description: Action name, for example `LOGIN_FAILED`.
+          schema: { $ref: "#/components/schemas/AuditAction" }
+        - name: entityType
+          in: query
+          description: Kind of record affected, for example `User`.
+          schema: { type: string, maxLength: 64 }
+        - name: entityId
+          in: query
+          description: Id of the record affected.
+          schema: { type: string, maxLength: 64 }
+        - name: from
+          in: query
+          description: Earliest time, inclusive.
+          schema: { $ref: "#/components/schemas/Instant" }
+        - name: to
+          in: query
+          description: Latest time, inclusive. Must not be before `from`.
+          schema: { $ref: "#/components/schemas/Instant" }
+      responses:
+        "200":
+          description: One page of entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEntry" }
+                  meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: exam_session
+      description: Set by sign-in and sign-up. Sent automatically by the browser when requests include credentials.
+
+  headers:
+    SessionCookie:
+      description: >-
+        The session cookie: `exam_session=<token>; HttpOnly; Path=/; Expires=<8 hours>`,
+        with `Secure` in production. `SameSite` is `Lax`, or `None` when the API
+        is configured for a UI on another origin.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds to wait before trying again.
+      schema: { type: integer, minimum: 1 }
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number, starting at 1.
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      description: Items per page.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: The user's id.
+      schema: { type: string, maxLength: 64 }
+
+  responses:
+    BadRequest:
+      description: The body is not valid JSON, is empty, or the request contains an invalid character.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: No valid session. Send the user to sign-in.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: UNAUTHENTICATED, message: Sign in to continue. }
+    Forbidden:
+      description: The signed-in user's role does not allow this, or the request came from an origin that is not allowed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { code: FORBIDDEN, message: You do not have permission to do this. }
+    ForbiddenOrigin:
+      description: The request came from an origin that is not allowed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such record, or it is not visible to this user.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PayloadTooLarge:
+      description: The JSON body is larger than 64 KB.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: One or more fields are invalid, or the request has a field the API does not accept.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Some fields are invalid.
+              details:
+                - { path: email, message: Enter a valid email address. }
+    RateLimited:
+      description: Too many attempts. Wait for the number of seconds in `Retry-After`.
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Instant:
+      type: string
+      format: date-time
+      description: ISO 8601 time in UTC.
+      examples: ["2026-11-27T08:30:00.000Z"]
+
+    Role:
+      type: string
+      enum: [ADMIN, EXAMINER, CANDIDATE]
+      description: The user type. Decides which area of the UI the user sees.
+
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+      description: Case-insensitive. Surrounding spaces are removed and it is stored in lower case.
+
+    Name:
+      type: string
+      minLength: 1
+      maxLength: 120
+      description: Display name. Surrounding spaces are removed; it cannot be blank.
+
+    NewPassword:
+      type: string
+      minLength: 8
+      maxLength: 128
+      format: password
+      description: 8 to 128 characters. There are no rules about character types; length is what matters.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - BAD_REQUEST
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - PAYLOAD_TOO_LARGE
+                - VALIDATION_FAILED
+                - RATE_LIMITED
+                - INTERNAL
+              description: Stable identifier. Switch on this, not on the message.
+            message:
+              type: string
+              description: Safe to show to the user.
+            details:
+              type: array
+              description: Present for VALIDATION_FAILED.
+              items: { $ref: "#/components/schemas/FieldError" }
+
+    FieldError:
+      type: object
+      required: [path, message]
+      properties:
+        path:
+          type: string
+          description: Field name. Empty when the problem is with the request as a whole.
+        message:
+          type: string
+
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total:
+          type: integer
+          minimum: 0
+          description: Number of items matching the filters, across all pages.
+
+    SessionUser:
+      type: object
+      required: [id, email, name, role]
+      properties:
+        id: { type: string }
+        email: { $ref: "#/components/schemas/Email" }
+        name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+
+    SessionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, expiresAt]
+          properties:
+            user: { $ref: "#/components/schemas/SessionUser" }
+            expiresAt:
+              allOf: [{ $ref: "#/components/schemas/Instant" }]
+              description: When the session ends if nothing ends it sooner.
+
+    User:
+      type: object
+      required: [id, email, name, role, isActive, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        email: { $ref: "#/components/schemas/Email" }
+        name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        isActive:
+          type: boolean
+          description: False means the user cannot sign in.
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        updatedAt: { $ref: "#/components/schemas/Instant" }
+
+    SignUpRequest:
+      type: object
+      additionalProperties: false
+      required: [email, name, password, role]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        name: { $ref: "#/components/schemas/Name" }
+        password: { $ref: "#/components/schemas/NewPassword" }
+        role:
+          type: string
+          enum: [CANDIDATE, EXAMINER]
+          description: Upper case. ADMIN is not accepted.
+
+    SignInRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        password: { type: string, minLength: 1, maxLength: 128, format: password }
+
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 128, format: password }
+        newPassword: { $ref: "#/components/schemas/NewPassword" }
+
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [email, name, role, password]
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        name: { $ref: "#/components/schemas/Name" }
+        role: { $ref: "#/components/schemas/Role" }
+        password: { $ref: "#/components/schemas/NewPassword" }
+
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { $ref: "#/components/schemas/Name" }
+        role: { $ref: "#/components/schemas/Role" }
+        isActive: { type: boolean }
+        password:
+          allOf: [{ $ref: "#/components/schemas/NewPassword" }]
+          description: Sets a new password for the user and signs them out everywhere.
+
+    PlatformOverview:
+      type: object
+      required: [serverTime, users, exams, attempts, disputes, sessions, security]
+      properties:
+        serverTime: { $ref: "#/components/schemas/Instant" }
+        users:
+          type: object
+          required: [total, active, inactive, administrators, examiners, candidates]
+          properties:
+            total: { type: integer }
+            active: { type: integer }
+            inactive: { type: integer }
+            administrators: { type: integer }
+            examiners: { type: integer }
+            candidates: { type: integer }
+        exams:
+          type: object
+          required: [draft, published, upcoming, ongoing, completed]
+          properties:
+            draft: { type: integer }
+            published: { type: integer }
+            upcoming: { type: integer, description: Published and not yet started. Included in published. }
+            ongoing: { type: integer, description: Published and inside its time slot now. Included in published. }
+            completed: { type: integer }
+        attempts:
+          type: object
+          required: [inProgress, interrupted, submitted, expired]
+          properties:
+            inProgress: { type: integer }
+            interrupted: { type: integer, description: In progress with no recent contact. Included in inProgress. }
+            submitted: { type: integer }
+            expired: { type: integer, description: Closed by the server at the deadline. }
+        disputes:
+          type: object
+          required: [open]
+          properties:
+            open: { type: integer }
+        sessions:
+          type: object
+          required: [active]
+          properties:
+            active: { type: integer, description: Users signed in right now. }
+        security:
+          type: object
+          required: [failedSignInsLast24Hours]
+          properties:
+            failedSignInsLast24Hours: { type: integer }
+
+    AuditAction:
+      type: string
+      description: |
+        Known actions so far. More are added with each module, so treat
+        unknown values as plain text.
+      examples: [LOGIN_FAILED]
+      enum:
+        - USER_SIGNED_UP
+        - LOGIN_SUCCEEDED
+        - LOGIN_FAILED
+        - LOGOUT
+        - PASSWORD_CHANGED
+        - USER_CREATED
+        - USER_UPDATED
+
+    AuditEntry:
+      type: object
+      required: [id, action, entityType, entityId, metadata, ip, createdAt, actor]
+      properties:
+        id: { type: string }
+        action:
+          type: string
+          description: See AuditAction for known values.
+        entityType: { type: string, description: Kind of record affected. }
+        entityId: { type: [string, "null"] }
+        metadata:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Details that depend on the action. Never contains a password.
+        ip: { type: [string, "null"], description: Network address of the request. }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        actor:
+          description: Who did it. Null when there was no signed-in user.
+          oneOf:
+            - { $ref: "#/components/schemas/SessionUser" }
+            - { type: "null" }

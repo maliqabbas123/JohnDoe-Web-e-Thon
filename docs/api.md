@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users and Admin. The rest of the endpoint list is the plan; an OpenAPI 3.1 file will be added as endpoints are built |
+| Status | Conventions are final. Built so far: Platform, Auth, Users and Admin. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 

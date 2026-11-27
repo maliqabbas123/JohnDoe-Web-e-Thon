@@ -14,7 +14,7 @@
     "db:seed": "prisma db seed",
     "test": "npm run test:unit",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:unit": "tsx --test \"src/**/*.test.ts\"",
+    "test:unit": "tsx --test \"src/**/*.test.ts\" \"tests/unit/**/*.test.ts\"",
     "test:e2e": "tsx tests/run-e2e.ts"
   },
   "dependencies": {
@@ -39,7 +39,8 @@
     "prisma": "^7.10.1",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "yaml": "^2.9.1"
   },
   "engines": {
     "node": ">=22"

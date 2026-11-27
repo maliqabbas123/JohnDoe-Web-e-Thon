@@ -9,7 +9,7 @@
 
 | Level | What it covers | Where | Command |
 |---|---|---|---|
-| Unit | Pure logic with no server or database, such as password hashing | `src/**/*.test.ts` | `npm run test:unit` |
+| Unit | Pure logic with no server or database, such as password hashing; and a check that `docs/openapi.yaml` describes exactly the endpoints that exist | `src/**/*.test.ts`, `tests/unit` | `npm run test:unit` |
 | End-to-end | Every endpoint over HTTP against a production build and a real PostgreSQL database | `tests/e2e/*.test.ts` | `npm run test:e2e` |
 | Static | Lint and type-check | whole repository | `npm run lint`, `npm run typecheck` |
 
