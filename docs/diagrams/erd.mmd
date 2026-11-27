@@ -1,0 +1,239 @@
+erDiagram
+  User ||--o{ Session : "signs in with"
+  User ||--o| UserPreference : "has"
+  User ||--o{ Topic : "owns"
+  User ||--o{ Question : "owns"
+  User ||--o{ Exam : "owns"
+  Topic ||--o{ Question : "groups"
+  Question ||--o{ QuestionOption : "has"
+  Exam ||--o{ ExamQuestion : "question pool"
+  Question ||--o{ ExamQuestion : "used in"
+  Exam ||--o{ ExamDifficultyRule : "difficulty mix"
+  Exam ||--o{ Enrollment : "has"
+  User ||--o{ Enrollment : "enrolled as candidate"
+  Enrollment ||--o{ RetakeGrant : "extra slots"
+  Exam ||--o{ Attempt : "has"
+  User ||--o{ Attempt : "takes"
+  RetakeGrant ||--o{ Attempt : "taken in"
+  Attempt ||--o{ AttemptQuestion : "paper and answers"
+  Question ||--o{ AttemptQuestion : "snapshot of"
+  AttemptQuestion ||--o{ GradeChange : "score history"
+  Attempt ||--o{ Disruption : "contact gaps"
+  Attempt ||--o{ Incident : "signals"
+  Exam ||--o{ Announcement : "has"
+  Attempt ||--o{ Dispute : "challenged by"
+  Dispute ||--o{ DisputeItem : "covers"
+  AttemptQuestion ||--o| DisputeItem : "disputed in"
+  Dispute ||--o| DisputeAttachment : "supported by"
+  Dispute ||--o| RetakeGrant : "may result in"
+  DisputeItem ||--o{ GradeChange : "may cause"
+  Attempt ||--o{ Report : "issued as"
+  User ||--o{ ImportJob : "runs"
+  User ||--o{ AuditLog : "acts in"
+
+  User {
+    string id PK
+    string email UK
+    string name
+    string passwordHash
+    enum role "ADMIN, EXAMINER, CANDIDATE"
+    boolean isActive
+  }
+  Session {
+    string id PK
+    string userId FK
+    string tokenHash UK "SHA-256 of cookie token"
+    datetime expiresAt
+    datetime revokedAt
+  }
+  UserPreference {
+    string userId PK
+    json workspace
+  }
+  Topic {
+    string id PK
+    string ownerId FK
+    string name "unique per owner"
+  }
+  Question {
+    string id PK
+    string ownerId FK
+    string topicId FK
+    enum type "SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN"
+    enum difficulty "EASY, MEDIUM, HARD"
+    string text
+    decimal defaultMarks
+    boolean isArchived
+  }
+  QuestionOption {
+    string id PK
+    string questionId FK
+    string text
+    boolean isCorrect
+    int position
+  }
+  Exam {
+    string id PK
+    string ownerId FK
+    string title
+    datetime startsAt "shared slot, UTC"
+    datetime endsAt
+    int durationMinutes
+    decimal totalMarks
+    enum status "DRAFT, PUBLISHED, COMPLETED"
+    enum selectionMode "FIXED, BALANCED"
+    int questionCount
+    int maxAttempts "null = unlimited"
+    enum resultPolicy "BEST, LATEST"
+    int disputeWindowHours
+    boolean integritySwitches "eight columns"
+  }
+  ExamQuestion {
+    string id PK
+    string examId FK
+    string questionId FK
+    decimal marks "FIXED mode only"
+    int position
+  }
+  ExamDifficultyRule {
+    string id PK
+    string examId FK
+    enum difficulty
+    int percent
+    decimal marksEach
+  }
+  Enrollment {
+    string id PK
+    string examId FK
+    string candidateId FK
+    string enrolledById FK
+  }
+  RetakeGrant {
+    string id PK
+    string examId FK
+    string candidateId FK
+    datetime startsAt
+    datetime endsAt
+    int attemptsAllowed
+    string reason
+    string disputeId FK
+    string grantedById FK
+  }
+  Attempt {
+    string id PK
+    string examId FK
+    string userId FK
+    int attemptNumber
+    string retakeGrantId FK
+    boolean isSandbox
+    enum status "IN_PROGRESS, SUBMITTED, EXPIRED"
+    enum connection "ONLINE, INTERRUPTED"
+    enum gradingStatus "PENDING, NEEDS_REVIEW, GRADED"
+    datetime startedAt
+    datetime deadlineAt "fixed at start"
+    datetime submittedAt
+    int currentPosition
+    decimal score
+    decimal maxScore
+    datetime resultReleasedAt
+    string honeypotMarker
+  }
+  AttemptQuestion {
+    string id PK
+    string attemptId FK
+    string questionId FK
+    int position
+    decimal marks
+    json snapshot "frozen question and key"
+    array selectedOptionIds
+    string writtenAnswer
+    boolean flagged
+    int revision
+    int timeSpentSeconds "server measured"
+    int keystrokeCount
+    decimal autoScore
+    decimal manualScore
+  }
+  GradeChange {
+    string id PK
+    string attemptQuestionId FK
+    decimal previousScore
+    decimal newScore
+    string reason
+    string disputeItemId FK
+    string changedById FK
+  }
+  Disruption {
+    string id PK
+    string attemptId FK
+    datetime startedAt
+    datetime endedAt
+  }
+  Incident {
+    string id PK
+    string attemptId FK
+    string attemptQuestionId FK
+    enum type
+    enum source "CLIENT, SERVER"
+    enum severity "LOW, MEDIUM, HIGH"
+    json details
+  }
+  Announcement {
+    string id PK
+    string examId FK
+    string authorId FK
+    string message
+  }
+  Dispute {
+    string id PK
+    string attemptId FK
+    string raisedById FK
+    enum category "GRADING_ERROR, FAULTY_QUESTION, TECHNICAL_INCIDENT"
+    string explanation
+    enum status "OPEN, RESOLVED"
+    string resolvedById FK
+  }
+  DisputeItem {
+    string id PK
+    string disputeId FK
+    string attemptQuestionId FK "null = whole attempt"
+    enum decision "PENDING, ACCEPTED, REJECTED"
+    string decisionReason
+  }
+  DisputeAttachment {
+    string id PK
+    string disputeId FK
+    string fileName
+    string mimeType
+    int sizeBytes
+    bytes data
+  }
+  Report {
+    string id PK
+    string attemptId FK
+    string verificationCode UK
+    decimal score
+    string contentHash
+    datetime supersededAt
+  }
+  ImportJob {
+    string id PK
+    string userId FK
+    enum kind "CANDIDATES, QUESTIONS"
+    int successCount
+    int failureCount
+    json errors
+  }
+  AuditLog {
+    string id PK
+    string actorId FK
+    string action
+    string entityType
+    string entityId
+    json metadata
+  }
+  RateLimit {
+    string key PK
+    int count
+    datetime resetAt
+  }

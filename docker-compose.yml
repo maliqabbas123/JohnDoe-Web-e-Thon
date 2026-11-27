@@ -1,0 +1,21 @@
+# Local development database. Port 5434 avoids clashing with other local Postgres instances.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: exam_local_dev
+      POSTGRES_DB: exam_system
+    ports:
+      - "5434:5432"
+    volumes:
+      - exam_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam -d exam_system"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  exam_db_data:
