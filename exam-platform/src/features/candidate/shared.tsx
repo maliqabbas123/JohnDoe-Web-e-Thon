@@ -101,7 +101,7 @@ function AnswerInput({
   change,
   order,
 }: {
-  q: Question
+  q: Pick<Question, 'id' | 'kind' | 'options'>
   answer?: Answer
   change: (value: Answer) => void
   order?: number[]

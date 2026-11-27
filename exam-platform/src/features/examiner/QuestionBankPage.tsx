@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { isLive } from '@/lib/api'
+import { LiveQuestionBank } from './LiveQuestionBank'
 import {
   Badge,
   Button,
@@ -16,6 +18,10 @@ import type { Difficulty, Kind } from '../../types'
 import { blank, difficulties, kinds, qp, validate } from './shared'
 
 export function QuestionBankPage() {
+  return isLive ? <LiveQuestionBank /> : <DemoQuestionBank />
+}
+
+function DemoQuestionBank() {
   const { state, update, toast } = useStore(),
     [open, set] = useState(false)
   return (
