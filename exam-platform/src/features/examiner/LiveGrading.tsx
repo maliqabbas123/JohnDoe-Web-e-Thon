@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Field, Heading, Panel } from "@/components/shared";
 import { api } from "@/lib/api";
+import { LiveExamNav } from "./LiveExamNav";
 
 type QueueItem = {
   attemptId: string;
@@ -109,14 +110,12 @@ export function LiveGradingQueue() {
       <Heading
         title="Grading queue"
         actions={
-          <Button
-            secondary
-            to={"/examiner/exams/" + encodeURIComponent(id) + "/setup"}
-          >
-            Exam setup
+          <Button secondary to="/examiner">
+            My examinations
           </Button>
         }
       />
+      <LiveExamNav id={id} current="grading" />
       <Panel>
         {error && (
           <p role="alert" className="danger">

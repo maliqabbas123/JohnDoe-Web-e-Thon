@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.10.0
+  version: 0.18.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -89,8 +89,22 @@ tags:
     description: Review and grade closed submissions for an examiner's own exam.
   - name: Exams
     description: Exam configuration and publication. Examiner only.
+  - name: Integrity
+    description: Signals for examiner review on a closed attempt.
+  - name: Monitoring
+    description: Candidate contact and signals, and the exam owner's live view and announcements.
   - name: Workspace
     description: A candidate’s saved exam workspace settings.
+  - name: Enrolment
+    description: Exam rosters, retake slots and candidate availability.
+  - name: Results
+    description: Examiner result release and analytics, and candidate review of released results.
+  - name: Attempts
+    description: Candidate exam delivery, answers, submission and examiner previews.
+  - name: Disputes
+    description: Candidate disputes and examiner decisions on released results.
+  - name: Reports
+    description: Private result reports and public code verification.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -971,13 +985,99 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /import/candidates:
+    post:
+      tags: [Enrolment]
+      operationId: importCandidates
+      summary: Import and enrol candidates in an owned exam
+      description: |
+        Examiner only, for an exam they own. Valid rows are enrolled in the
+        exam. Existing active candidates keep their name and password.
+        Already-enrolled candidates count as successful rows.
+
+        **UI notes:** Send a UTF-8 CSV or JSON file as the body. JSON is an
+        array of objects with email and name. CSV uses the exact header
+        email,name and starts data at row 2. See the
+        [example file](examples/candidate-import.csv). Select the target exam
+        and pass its ID as examId. The file can hold up to 50 rows and
+        512 KiB. The rate limit is three uploads per examiner per 60 seconds.
+
+        On 201, show the job counts and display initialCredentials once.
+        Each new account has a generated first password for private delivery
+        to its candidate. Clear the credentials when the view closes and keep
+        them out of client storage and logs. Retried imports and job history
+        omit previously issued passwords. If a password is lost, an
+        administrator can reset it through the existing account workflow.
+        On 429 follow Retry-After.
+      parameters:
+        - name: examId
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - name: fileName
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 50
+              items:
+                type: object
+                additionalProperties: false
+                required: [email, name]
+                properties:
+                  email: { $ref: "#/components/schemas/Email" }
+                  name: { $ref: "#/components/schemas/Name" }
+            example:
+              - { email: candidate.one@example.test, name: Candidate One }
+          text/csv:
+            schema: { type: string }
+            example: |
+              email,name
+              candidate.one@example.test,Candidate One
+              candidate.two@example.test,"Surname, Given"
+      responses:
+        "201":
+          description: The import outcome and first passwords for accounts created by this upload.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [job, initialCredentials]
+                    properties:
+                      job: { $ref: "#/components/schemas/ImportJob" }
+                      initialCredentials:
+                        type: array
+                        items:
+                          type: object
+                          required: [row, email, password]
+                          properties:
+                            row: { type: integer, minimum: 1 }
+                            email: { $ref: "#/components/schemas/Email" }
+                            password: { type: string, format: password }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /import/jobs:
     get:
       tags: [Question bank]
       operationId: listImportJobs
       summary: List your past imports
       description: |
-        Examiner only. Returns only your import jobs, newest first.
+        Examiner only. Returns your import jobs, newest first. Candidate jobs include the target exam ID.
 
         **UI notes:** Display each job's counts and expand its `errors` list
         for per-row feedback. Request the next page using only the
@@ -1269,6 +1369,370 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /exams/{id}/enrollments:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: listExamEnrolments
+      summary: List an exam's enrolled candidates
+      description: |
+        **UI notes:** Page through this exam's roster to display candidates and their enrolment dates. Rows are ordered by candidate ID.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List an exam's enrolled candidates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnrolmentPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Enrolment]
+      operationId: enrolExamCandidates
+      summary: Enrol candidates by email
+      description: |
+        **UI notes:** Send 1–500 email addresses, with a body up to 128 KiB. Results follow input order and use normalized emails. Duplicate entries after a successful enrolment report ALREADY_ENROLLED. Unknown emails and non-candidate accounts both report NOT_A_REGISTERED_CANDIDATE. A candidate can see the exam once it is published.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnrolCandidatesRequest" }
+      responses:
+        "200":
+          description: Enrol candidates by email.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnrolCandidatesResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/EnrolmentPayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/enrollments/{candidateId}:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+      - { $ref: "#/components/parameters/EnrolmentCandidateId" }
+    delete:
+      tags: [Enrolment]
+      operationId: removeExamEnrolment
+      summary: Remove an unused enrolment
+      description: |
+        **UI notes:** Send the candidate ID from the roster. Removal also clears the candidate's retake grants for that exam. A 409 means the candidate has already attempted it. A 204 has no body.
+      responses:
+        "204":
+          description: Remove an unused enrolment.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/EnrolmentConflict" }
+
+  /exams/{id}/retake-grants:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: listExamRetakeGrants
+      summary: List an exam's retake grants
+      description: |
+        **UI notes:** Show the examiner's history in newest-first order, including revoked grants. revokedAt is null on grants that have not been withdrawn.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List an exam's retake grants.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetakeGrantPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Enrolment]
+      operationId: createExamRetakeGrant
+      summary: Give a candidate an extra exam slot
+      description: |
+        **UI notes:** Select a candidate from the roster, send the start and end instants and give a written reason. This slot has its own attempt allowance, which defaults to one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRetakeGrantRequest" }
+      responses:
+        "201":
+          description: Give a candidate an extra exam slot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetakeGrantResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/exams:
+    get:
+      tags: [Enrolment]
+      operationId: listCandidateExams
+      summary: List the candidate's exams
+      description: |
+        **UI notes:** Show the candidate's current status and next eligible slot for each exam. Enrolled drafts become visible on publication. Link each row to the detail endpoint for the rules and server time.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List the candidate's exams.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateExamPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/exams/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: getCandidateExam
+      summary: Read a candidate's exam and rules
+      description: |
+        **UI notes:** Use this screen to show instructions, rules, and availability before an attempt. A slot starts at startsAt and closes at endsAt. A live attempt takes priority, then the open main slot, then the available retake with the earliest end. Upcoming slots are ordered by start. Use serverTime with deadlineAt for a live attempt.
+      responses:
+        "200":
+          description: Read a candidate's exam and rules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateExamDetailResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/exams/join:
+    post:
+      tags: [Enrolment]
+      operationId: joinExamByCode
+      summary: Join a published exam with a code
+      description: |
+        **UI notes:** Send the code shared by the examiner. Leading and trailing whitespace and hex letter case are normalized. Treat invalid, rotated, disabled, draft and closed codes as the same 404. On either 200 outcome, use examId to load the exam. A candidate can submit ten codes per 15 minutes. Use Retry-After on 429.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinExamRequest" }
+      responses:
+        "200":
+          description: Join a published exam with a code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinExamResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /exams/{id}/attempts:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Attempts]
+      operationId: startCandidateAttempt
+      summary: Start or resume an exam attempt
+      description: |
+        **UI notes:** Show the candidate’s rules before sending rulesAccepted. Use a 201 response to open a new attempt and a 200 response to resume an existing one. A 409 means no eligible slot or the paper is unavailable. Use deadlineAt and serverTime for the countdown.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartCandidateAttemptRequest" }
+      responses:
+        "200":
+          description: Start or resume an exam attempt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "201":
+          description: Start or resume an exam attempt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    get:
+      tags: [Attempts]
+      operationId: getCandidateAttempt
+      summary: Read an attempt and its question statuses
+      description: |
+        **UI notes:** Use currentPosition, answered and flagged to restore the exam view. Compare deadlineAt with serverTime. An elapsed attempt is closed before its state is returned.
+      responses:
+        "200":
+          description: Read an attempt and its question statuses.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attempts/{id}/questions/{position}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+      - { $ref: "#/components/parameters/CandidateQuestionPosition" }
+    get:
+      tags: [Attempts]
+      operationId: getCandidateAttemptQuestion
+      summary: Open one question on the paper
+      description: |
+        **UI notes:** Display the returned question and restore its saved answer and revision. Use this endpoint for navigation, as opening a different position records server-side timing. Display aiNotice when present and apply the hidden marker instruction when honeypot is present. On 409, show the closed attempt state.
+      responses:
+        "200":
+          description: Open one question on the paper.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateQuestionResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+
+  /attempts/{id}/answers/{position}:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+      - { $ref: "#/components/parameters/CandidateQuestionPosition" }
+    put:
+      tags: [Attempts]
+      operationId: saveCandidateAttemptAnswer
+      summary: Autosave answer fields or a review flag
+      description: |
+        **UI notes:** Send revision starting at one and increment it for each new edit. Send only fields that changed. Send selectedOptionIds for choice questions or writtenAnswer for written answers. An accepted false response means the stored revision is newer or equal. Use the returned revision and savedAt to confirm saves. Send cumulative keystroke and paste counts. A 409 means no more changes can be saved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCandidateAnswerRequest" }
+      responses:
+        "200":
+          description: Autosave answer fields or a review flag.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveCandidateAnswerResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/scratchpad:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    put:
+      tags: [Attempts]
+      operationId: saveCandidateScratchpad
+      summary: Save the attempt scratchpad
+      description: |
+        **UI notes:** Send the complete text and serialize saves in the client. The exam state response restores the last saved scratchpad. A 409 means the attempt has closed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCandidateScratchpadRequest" }
+      responses:
+        "200":
+          description: Save the attempt scratchpad.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaveCandidateScratchpadResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/submit:
+    parameters:
+      - { $ref: "#/components/parameters/AttemptId" }
+    post:
+      tags: [Attempts]
+      operationId: submitCandidateAttempt
+      summary: Submit an attempt and score objective answers
+      description: |
+        **UI notes:** Flush pending saves before submitting. The response can be SUBMITTED or EXPIRED. Retrying returns the same submission state and timestamp. Written answers appear in the examiner’s grading queue.
+      responses:
+        "200":
+          description: Submit an attempt and score objective answers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmitCandidateAttemptResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /exams/{id}/sandbox:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    post:
+      tags: [Attempts]
+      operationId: startExamSandbox
+      summary: Preview the exam as a candidate
+      description: |
+        **UI notes:** Owners can preview a draft with a complete paper. The preview has its own deadline and uses the candidate attempt routes. A 200 resumes an open preview. A 409 means the paper is incomplete.
+      responses:
+        "200":
+          description: Preview the exam as a candidate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "201":
+          description: Preview the exam as a candidate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateAttemptStartResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/CandidateAttemptConflict" }
+    delete:
+      tags: [Attempts]
+      operationId: resetExamSandbox
+      summary: Reset an examiner’s exam preview
+      description: |
+        **UI notes:** Discard the examiner’s preview attempts for this exam. A 204 response has no body.
+      responses:
+        "204":
+          description: Reset an examiner’s exam preview.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -1378,6 +1842,304 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /attempts/{id}/heartbeat:
+    post:
+      tags: [Monitoring]
+      operationId: sendHeartbeat
+      summary: Report contact and receive announcements
+      description: |
+        Candidate only, for their own non-sandbox attempt. A gap of more than
+        45 seconds is recorded as a disruption. The deadline stays fixed.
+
+        **UI notes:** Send every 15 seconds while the attempt is live. Use the
+        returned server time and fixed deadline for the countdown. Send the
+        last announcementCursor as cursor. If hasMoreAnnouncements is true,
+        fetch the next page immediately. Stop when status is SUBMITTED or
+        EXPIRED. An elapsed attempt is finalized from its last saved answers.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+        - { $ref: "#/components/parameters/AnnouncementCursor" }
+      responses:
+        "200":
+          description: Current attempt timing and up to 20 announcements.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Heartbeat" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/incidents:
+    post:
+      tags: [Monitoring]
+      operationId: recordClientIncidents
+      summary: Report a batch of exam-page signals
+      description: |
+        Candidate only, for their own live non-sandbox attempt. The server
+        sets source to CLIENT, severity to LOW and records its receive time.
+
+        **UI notes:** Send only documented client events and their declared
+        details. Fullscreen, clipboard, context menu and extra-display events
+        require the corresponding switch. The whole batch is rejected if
+        any event is invalid. Send at most 20 events per request and 12
+        requests per candidate per 60 seconds. On 429 use Retry-After.
+        Stop sending when the attempt closes.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [incidents]
+              properties:
+                incidents:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: { $ref: "#/components/schemas/ClientIncident" }
+            example:
+              incidents:
+                - { type: TAB_HIDDEN, details: { awayMs: 1200 } }
+                - { type: COPY_ATTEMPT, details: { position: 3 } }
+      responses:
+        "201":
+          description: Number of events recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [accepted]
+                    properties:
+                      accepted: { type: integer, minimum: 1, maximum: 20 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The attempt has been submitted or its deadline has elapsed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /exams/{id}/monitor:
+    get:
+      tags: [Monitoring]
+      operationId: getExamMonitor
+      summary: Monitor attempts for your exam
+      description: |
+        Examiner only, own exam. Reports aggregate progress and signal counts
+        for non-sandbox attempts and records new contact gaps it observes.
+
+        **UI notes:** Poll every few seconds. Display attempt status before
+        connection state. A disruption is evidence of lost contact. Use
+        meta.nextCursor to load additional rows in attempt ID order.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200":
+          description: A page of attempts and the snapshot time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MonitoredAttempt" }
+                  meta:
+                    type: object
+                    required: [pageSize, nextCursor, serverTime]
+                    properties:
+                      pageSize: { type: integer, minimum: 1, maximum: 200 }
+                      nextCursor: { type: [string, "null"] }
+                      serverTime: { $ref: "#/components/schemas/Instant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/announcements:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Monitoring]
+      operationId: listExamAnnouncements
+      summary: List announcements for your exam
+      description: |
+        Examiner only, own exam.
+
+        **UI notes:** Messages are in delivery order. Send meta.nextCursor
+        as cursor for the next page. Render messages as plain text.
+      parameters:
+        - { $ref: "#/components/parameters/AnnouncementCursor" }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: A page of announcements.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ExamAnnouncement" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Monitoring]
+      operationId: sendExamAnnouncement
+      summary: Send an announcement to candidates in your exam
+      description: |
+        Examiner only, own exam.
+
+        **UI notes:** Send 1 to 1,000 characters of plain text. Candidates
+        receive the announcement through their next heartbeat for this exam.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              additionalProperties: false
+              properties:
+                message: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "201":
+          description: The announcement to display in the history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ExamAnnouncement" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/integrity:
+    get:
+      tags: [Integrity]
+      operationId: getAttemptIntegrity
+      summary: Read integrity signals for a closed attempt
+      description: |
+        Examiner only, for an exam they own. The read analyzes the frozen
+        submission and records newly observed server signals once.
+
+        **UI notes:** Show the level and counts as signals for review. Use
+        nextCursor to page signals. Totals cover the whole attempt. A live
+        attempt returns 409. Sandbox and foreign attempts return 404.
+
+        Fast answers are evaluated on hard objective questions within five
+        seconds. Typing-count comparisons require a written answer with
+        length and typing evidence and the clipboard switch enabled.
+        Similarity samples up to 200 other candidates' latest closed attempts
+        and 4,000 answer records, comparing the same frozen questions.
+        Written comparisons use the first 2,000 characters and require at least
+        80 characters and 12 words. Matching wrong selections require at least
+        three common questions. The response omits answer text and markers.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Signals for review and the saved examiner note.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/IntegritySummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/integrity/review:
+    put:
+      tags: [Integrity]
+      operationId: saveAttemptIntegrityReview
+      summary: Save an integrity review note
+      description: |
+        Examiner only, for a closed attempt in their own exam.
+
+        **UI notes:** Send a note of up to 2,000 characters. The response
+        records the author and server time. A new save replaces the note.
+        Review notes are private to the examiner.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties:
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        "200":
+          description: Saved note and reviewer.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/IntegrityReview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /exams/{id}/grading:
     get:
       tags: [Grading]
@@ -1432,7 +2194,7 @@ paths:
         this response in candidate views. A live attempt returns `409`.
         Sandbox previews and attempts from other examiners return `404`.
       parameters:
-        - $ref: "#/components/parameters/GradingAttemptId"
+        - $ref: "#/components/parameters/AttemptId"
       responses:
         "200":
           description: Frozen paper, answers and latest grade.
@@ -1466,7 +2228,7 @@ paths:
         `409` means the attempt is still open. A `422` identifies an invalid
         position, non-written question, bad mark or missing reason.
       parameters:
-        - $ref: "#/components/parameters/GradingAttemptId"
+        - $ref: "#/components/parameters/AttemptId"
         - name: position
           in: path
           required: true
@@ -1507,6 +2269,492 @@ paths:
         "409": { $ref: "#/components/responses/AttemptOpenForGrading" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/results:
+    get:
+      tags: [Results]
+      operationId: listExamResults
+      summary: List the result for each enrolled candidate
+      description: |
+        Examiner only, for an exam they own. Selects each candidate's highest
+        fully graded score with the earliest attempt number breaking a tie
+        under BEST, or their latest fully graded attempt under LATEST.
+
+        **UI notes:** A candidate without a fully graded attempt shows their
+        latest closed attempt, or a null result if they have never submitted.
+        A null release time means the selected attempt is private. Page by
+        candidate id using `meta.nextCursor`.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: List the result for each enrolled candidate.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ExamCandidateResult" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/results/release:
+    post:
+      tags: [Results]
+      operationId: releaseExamResults
+      summary: Release current fully graded results
+      description: |
+        Examiner only, for an exam they own. The release applies to the
+        policy-selected attempt of each candidate. It preserves timestamps for
+        results that were already released.
+
+        **UI notes:** Send no body. Show the `released` and `alreadyReleased`
+        result counts. `needsReview` counts closed attempts still waiting for
+        marks, which this call skips. A candidate can have an older eligible
+        result and a newer attempt waiting for review. A null release time in
+        the response means this call published zero results.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+      responses:
+        "200":
+          description: Release current fully graded results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ResultRelease" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/results:
+    get:
+      tags: [Results]
+      operationId: listMyResults
+      summary: List the candidate's released results
+      description: |
+        Candidate only. Shows one released result per exam, selected under
+        the exam's result policy from the candidate's released attempts.
+
+        **UI notes:** An eligible private retake leaves the prior released
+        result visible. Page newest release first using `meta.nextCursor`
+        and open the detail using the returned `attemptId`.
+      parameters:
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: List the candidate's released results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CandidateResult" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/results/{attemptId}:
+    get:
+      tags: [Results]
+      operationId: getMyResult
+      summary: Read a released result and review the submitted answers
+      description: |
+        Candidate only. Accessible for their own released attempts, including
+        results superseded by a later release. Other candidates' results,
+        private attempts and sandbox attempts return 404.
+
+        **UI notes:** Render questions and options in the supplied order. Use
+        `answerKey` only when present. It appears for objective questions
+        when the examiner enables answer reveal. The question and its answer
+        key come from the frozen attempt.
+      parameters:
+        - name: attemptId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read a released result and review the submitted answers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/CandidateResultReview" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /exams/{id}/analytics:
+    get:
+      tags: [Results]
+      operationId: getExamAnalytics
+      summary: Read score statistics and paper fairness
+      description: |
+        Examiner only, for an exam they own. Score statistics use one fully
+        graded result per candidate according to the exam's policy, including
+        private results. Distribution buckets use percentages, with an
+        exclusive upper bound except for the final bucket, which includes 100.
+
+        **UI notes:** Use `fairness.meta.nextCursor` to page papers. Each paper
+        is assessed using scores from other attempts on each question, weighted
+        by its marks. Difficulty is one minus the expected mark fraction.
+        At least three other scores on every question are required. A flag
+        means the paper differs from the mean of other comparable papers by
+        at least 0.15 on the zero-to-one scale. Missing evidence yields a
+        null value or flag. The report leaves scores untouched.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read score statistics and paper fairness.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/ExamAnalytics" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/analytics/questions:
+    get:
+      tags: [Results]
+      operationId: listQuestionAnalytics
+      summary: Read per-question statistics for an exam
+      description: |
+        Examiner only, for an exam they own. Counts appearances on closed
+        attempts, including attempts waiting for written grades.
+
+        **UI notes:** `correctRate` divides correct answers by all servings.
+        Written questions have null correctness and wrong-option statistics.
+        Average time includes unopened questions. The label and text come from
+        the most recent served snapshot. Observed difficulty uses mean mark
+        fraction across scored answers, with EASY at 0.70 or above, MEDIUM
+        at 0.40 or above, and HARD below 0.40. Wrong-option counts exclude
+        accepted options and voided versions. Use `meta.nextCursor` to page.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          description: The next cursor returned by the previous page.
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Read per-question statistics for an exam.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/QuestionAnalytics" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /attempts/{id}/disputes:
+    post:
+      tags: [Disputes]
+      operationId: raiseDispute
+      summary: File a dispute for a released result
+      description: |
+        **UI notes:** Candidate only. Send positions for grading errors and faulty questions. A technical incident covers the whole attempt. Optional attachment bytes use standard base64 and are limited to 4 MiB decoded. A closed window or duplicate dispute returns 409.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RaiseDispute" }
+      responses:
+        "201":
+          description: File a dispute for a released result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Closed dispute window, duplicate dispute, or already decided item.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/disputes:
+    get:
+      tags: [Disputes]
+      operationId: listMyDisputes
+      summary: List my disputes and their decisions
+      description: |
+        **UI notes:** Candidate only. Use status to filter, and pass meta.nextCursor to fetch the next page.
+      parameters:
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, RESOLVED] }
+      responses:
+        "200":
+          description: List my disputes and their decisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Dispute" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/disputes:
+    get:
+      tags: [Disputes]
+      operationId: listExamDisputes
+      summary: List disputes for an owned exam
+      description: |
+        **UI notes:** Examiner only. Use status=OPEN for the decision queue and pass meta.nextCursor to fetch the next page.
+      parameters:
+        - { $ref: "#/components/parameters/ExamId" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 64 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, RESOLVED] }
+      responses:
+        "200":
+          description: List disputes for an owned exam.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Dispute" }
+                  meta: { $ref: "#/components/schemas/CursorMeta" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /disputes/{id}:
+    get:
+      tags: [Disputes]
+      operationId: getExamDispute
+      summary: Read a dispute and its evidence
+      description: |
+        **UI notes:** Examiner only. Open the linked attempt review for question and answer content. Use the attachment route to download the evidence.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+      responses:
+        "200":
+          description: Read a dispute and its evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /disputes/{id}/items/{itemId}:
+    patch:
+      tags: [Disputes]
+      operationId: decideDisputeItem
+      summary: Decide an open dispute item
+      description: |
+        **UI notes:** Examiner only. Supply a reason. Regrade a grading error, correct or void a faulty question, or grant a retake for a technical incident. Rejection applies to every category. An already decided item returns 409.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecideDisputeItem" }
+      responses:
+        "200":
+          description: Decide an open dispute item.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Dispute" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Closed dispute window, duplicate dispute, or already decided item.
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /disputes/{id}/attachment:
+    get:
+      tags: [Disputes]
+      operationId: getDisputeAttachment
+      summary: Download dispute evidence
+      description: |
+        **UI notes:** The author and exam owner can download evidence. The response carries the detected media type, Content-Disposition, and X-Content-Type-Options.
+      parameters:
+        - { $ref: "#/components/parameters/DisputeId" }
+      responses:
+        "200":
+          description: Download dispute evidence.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attempts/{id}/report:
+    post:
+      tags: [Reports]
+      operationId: issueReport
+      summary: Issue a report for a released result
+      description: |
+        **UI notes:** Examiner only for an owned attempt. Send no body. A repeat call returns the existing active report.
+        Use the verification URL from the response or download the PDF. After a grade correction, issue a replacement.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      responses:
+        "200":
+          description: The active report already exists.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedReportResponse" }
+        "201":
+          description: The report was issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedReportResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /attempts/{id}/report.pdf:
+    get:
+      tags: [Reports]
+      operationId: downloadReport
+      summary: Download the current issued PDF
+      description: |
+        **UI notes:** Authorized for the candidate or the exam owner. Download as a file.
+        If an earlier report was superseded or revoked, an examiner must issue a replacement before another download.
+      parameters:
+        - { $ref: "#/components/parameters/AttemptId" }
+      responses:
+        "200":
+          description: The issued PDF as a download.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /verify/{code}:
+    get:
+      tags: [Reports]
+      operationId: verifyReport
+      summary: Verify an issued report by its code
+      security: []
+      description: |
+        **UI notes:** Public. Display the returned validity, exam title, score and issue time.
+        A superseded or revoked code still identifies the original issue. Requests are limited to 60 per minute per address.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: The recorded validity and public report details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [validity, examTitle, score, issuedAt]
+                    properties:
+                      validity: { type: string, enum: [VALID, SUPERSEDED, REVOKED] }
+                      examTitle: { type: string }
+                      score: { type: number }
+                      issuedAt: { $ref: "#/components/schemas/Instant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
 components:
   securitySchemes:
@@ -1557,20 +2805,66 @@ components:
       description: The question's id.
       schema: { type: string, maxLength: 64 }
 
+    DisputeId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, maxLength: 64 }
     ExamId:
       name: id
       in: path
       required: true
       description: The exam's id.
       schema: { type: string, maxLength: 64 }
-    GradingAttemptId:
+    AnnouncementCursor:
+      name: cursor
+      in: query
+      description: Opaque announcement position from the previous response.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    AttemptId:
       name: id
       in: path
       required: true
       description: The attempt's id.
       schema: { type: string, maxLength: 64 }
 
+    EnrolmentCandidateId:
+      name: candidateId
+      in: path
+      required: true
+      description: Candidate ID from the exam roster.
+      schema: { type: string, maxLength: 64 }
+    EnrolmentPageNumber:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 }
+    EnrolmentPageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+    CandidateQuestionPosition:
+      name: position
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1, maximum: 999 }
+
   responses:
+    CandidateAttemptConflict:
+      description: The attempt has closed, its slot is unavailable, or the paper cannot be served.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    EnrolmentConflict:
+      description: The candidate has already attempted this exam.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    EnrolmentPayloadTooLarge:
+      description: The enrolment request is larger than 128 KiB.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     ExamConflict:
       description: The current exam state or mode prevents this action.
       content:
@@ -1971,6 +3265,284 @@ components:
         feedback: { type: [string, "null"], maxLength: 5000 }
         reason: { type: string, minLength: 1, maxLength: 1000, description: Required for changing a released mark. }
 
+    ExamCandidateResult:
+      type: object
+      required: [candidate, result]
+      properties:
+        candidate: { $ref: "#/components/schemas/GradingCandidate" }
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/ExamAttemptResult"
+            - type: "null"
+
+    ExamAttemptResult:
+      type: object
+      required: [attemptId, attemptNumber, status, gradingStatus, submittedAt, score, maxScore, resultReleasedAt]
+      properties:
+        attemptId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        status: { type: string, enum: [SUBMITTED, EXPIRED] }
+        gradingStatus: { type: string, enum: [PENDING, NEEDS_REVIEW, GRADED] }
+        submittedAt: { $ref: "#/components/schemas/Instant" }
+        score: { $ref: "#/components/schemas/GradeValue" }
+        maxScore: { type: number }
+        resultReleasedAt: { type: [string, "null"], format: date-time }
+
+    ResultRelease:
+      type: object
+      required: [released, alreadyReleased, needsReview, releasedAt]
+      properties:
+        released: { type: integer, minimum: 0 }
+        alreadyReleased: { type: integer, minimum: 0 }
+        needsReview: { type: integer, minimum: 0 }
+        releasedAt: { type: [string, "null"], format: date-time }
+
+    CandidateResult:
+      type: object
+      required: [attemptId, attemptNumber, submittedAt, score, maxScore, resultReleasedAt, exam]
+      properties:
+        attemptId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        submittedAt: { $ref: "#/components/schemas/Instant" }
+        score: { type: number }
+        maxScore: { type: number }
+        resultReleasedAt: { $ref: "#/components/schemas/Instant" }
+        exam:
+          type: object
+          required: [id, title]
+          properties:
+            id: { type: string }
+            title: { type: string }
+
+    CandidateResultReview:
+      allOf:
+        - $ref: "#/components/schemas/CandidateResult"
+        - type: object
+          required: [revealAnswers, questions]
+          properties:
+            revealAnswers: { type: boolean }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/CandidateResultQuestion" }
+
+    CandidateResultQuestion:
+      type: object
+      required: [position, type, text, options, marks, score, selectedOptionIds, writtenAnswer, feedback]
+      properties:
+        position: { type: integer, minimum: 1 }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        text: { type: string }
+        options:
+          type: array
+          items:
+            type: object
+            required: [id, text]
+            properties:
+              id: { type: string }
+              text: { type: string }
+        marks: { type: number }
+        score: { $ref: "#/components/schemas/GradeValue" }
+        selectedOptionIds:
+          type: array
+          items: { type: string }
+        writtenAnswer: { type: [string, "null"] }
+        feedback: { type: [string, "null"] }
+        answerKey:
+          type: object
+          required: [correctOptionIds, alsoAccepted, voided]
+          properties:
+            correctOptionIds:
+              type: array
+              items: { type: string }
+            alsoAccepted:
+              type: array
+              items:
+                type: array
+                items: { type: string }
+            voided: { type: boolean }
+
+    ExamAnalytics:
+      type: object
+      required: [scores, fairness]
+      properties:
+        scores:
+          type: object
+          required: [count, mean, median, min, max, distribution]
+          properties:
+            count: { type: integer, minimum: 0 }
+            mean: { type: [number, "null"] }
+            median: { type: [number, "null"] }
+            min: { type: [number, "null"] }
+            max: { type: [number, "null"] }
+            distribution:
+              type: array
+              items:
+                type: object
+                required: [fromPercent, toPercent, count]
+                properties:
+                  fromPercent: { type: integer }
+                  toPercent: { type: integer }
+                  count: { type: integer, minimum: 0 }
+        fairness:
+          type: object
+          required: [minimumOtherScores, outlierDistance, comparablePapers, papers, meta]
+          properties:
+            minimumOtherScores: { type: integer }
+            outlierDistance: { type: number }
+            comparablePapers: { type: integer }
+            papers:
+              type: array
+              items: { $ref: "#/components/schemas/PaperFairness" }
+            meta: { $ref: "#/components/schemas/CursorMeta" }
+
+    PaperFairness:
+      type: object
+      required: [attemptId, questionCount, comparedQuestions, observedDifficulty, peerDifficulty, flag]
+      properties:
+        attemptId: { type: string }
+        questionCount: { type: integer }
+        comparedQuestions: { type: integer }
+        observedDifficulty: { type: [number, "null"] }
+        peerDifficulty: { type: [number, "null"] }
+        flag: { type: [string, "null"], enum: [HARDER, EASIER, null] }
+
+    QuestionAnalytics:
+      type: object
+      required: [questionId, text, labelledDifficulty, served, skipped, correct, correctRate, averageTimeSeconds, meanMarkFraction, observedDifficulty, mostChosenWrongOption]
+      properties:
+        questionId: { type: string }
+        text: { type: string }
+        labelledDifficulty: { $ref: "#/components/schemas/Difficulty" }
+        served: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
+        correct: { type: [integer, "null"] }
+        correctRate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        averageTimeSeconds: { type: number }
+        meanMarkFraction: { type: [number, "null"] }
+        observedDifficulty: { type: [string, "null"], enum: [EASY, MEDIUM, HARD, null] }
+        mostChosenWrongOption:
+          type: [object, "null"]
+          required: [id, text, count]
+          properties:
+            id: { type: string }
+            text: { type: string }
+            count: { type: integer }
+
+    RaiseDispute:
+      type: object
+      additionalProperties: false
+      required: [category, explanation]
+      properties:
+        category: { type: string, enum: [GRADING_ERROR, FAULTY_QUESTION, TECHNICAL_INCIDENT] }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        positions: { type: array, maxItems: 200, uniqueItems: true, items: { type: integer, minimum: 1 } }
+        attachment:
+          type: object
+          additionalProperties: false
+          required: [fileName, contentBase64]
+          properties:
+            fileName: { type: string, minLength: 1, maxLength: 200 }
+            contentBase64: { type: string, contentEncoding: base64 }
+
+    DecideDisputeItem:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [action, reason]
+          properties:
+            action: { const: REJECT }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, score]
+          properties:
+            action: { const: REGRADE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            score: { type: number, minimum: 0, multipleOf: 0.01 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason]
+          properties:
+            action: { const: VOID_QUESTION }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, optionIds]
+          properties:
+            action: { const: ACCEPT_ALTERNATIVE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            optionIds: { type: array, minItems: 1, maxItems: 10, uniqueItems: true, items: { type: string } }
+        - type: object
+          additionalProperties: false
+          required: [action, reason, startsAt, endsAt]
+          properties:
+            action: { const: GRANT_RETAKE }
+            reason: { type: string, minLength: 1, maxLength: 2000 }
+            startsAt: { type: string, format: date-time }
+            endsAt: { type: string, format: date-time }
+            attemptsAllowed: { type: integer, minimum: 1, maximum: 100, default: 1 }
+
+    Dispute:
+      type: object
+      required: [id, attemptId, category, status, explanation, createdAt, resolvedAt, exam, candidate, items, attachment, retakeGrant]
+      properties:
+        id: { type: string }
+        attemptId: { type: string }
+        category: { type: string, enum: [GRADING_ERROR, FAULTY_QUESTION, TECHNICAL_INCIDENT] }
+        status: { type: string, enum: [OPEN, RESOLVED] }
+        explanation: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        resolvedAt: { type: [string, "null"], format: date-time }
+        candidate: { $ref: "#/components/schemas/GradingCandidate" }
+        exam:
+          type: object
+          required: [id, title]
+          properties:
+            id: { type: string }
+            title: { type: string }
+        attachment:
+          type: [object, "null"]
+          required: [fileName, mimeType, sizeBytes]
+          properties:
+            fileName: { type: string }
+            mimeType: { type: string }
+            sizeBytes: { type: integer, minimum: 1, maximum: 4194304 }
+        retakeGrant:
+          type: [object, "null"]
+          required: [id, startsAt, endsAt, attemptsAllowed]
+          properties:
+            id: { type: string }
+            startsAt: { $ref: "#/components/schemas/Instant" }
+            endsAt: { $ref: "#/components/schemas/Instant" }
+            attemptsAllowed: { type: integer, minimum: 1 }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, position, decision, decisionReason, decidedAt]
+            properties:
+              id: { type: string }
+              position: { type: [integer, "null"] }
+              decision: { type: string, enum: [PENDING, ACCEPTED, REJECTED] }
+              decisionReason: { type: [string, "null"] }
+              decidedAt: { type: [string, "null"], format: date-time }
+
+    IssuedReportResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, attemptId, verificationCode, verificationUrl, issuedAt, score, maxScore]
+          properties:
+            id: { type: string }
+            attemptId: { type: string }
+            verificationCode: { type: string }
+            verificationUrl: { type: string, format: uri }
+            issuedAt: { $ref: "#/components/schemas/Instant" }
+            score: { type: number }
+            maxScore: { type: number }
+
     QuestionType:
       type: string
       enum: [SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN]
@@ -2101,6 +3673,9 @@ components:
       properties:
         id: { type: string }
         kind: { type: string, enum: [QUESTIONS, CANDIDATES] }
+        examId:
+          type: [string, "null"]
+          description: The target exam for a candidate import. Null if that exam was deleted.
         fileName: { type: string }
         totalRows: { type: integer, minimum: 1 }
         successCount: { type: integer, minimum: 0 }
@@ -2149,6 +3724,145 @@ components:
       allOf:
         - { $ref: "#/components/schemas/WorkspacePreferencesInput" }
         - required: [theme, fontSize, lineSpacing, palettePosition]
+
+    ExamAnnouncement:
+      type: object
+      additionalProperties: false
+      required: [id, message, createdAt]
+      properties:
+        id: { type: string }
+        message: { type: string }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+
+    MonitoredAttemptStatus:
+      type: string
+      enum: [IN_PROGRESS, SUBMITTED, EXPIRED]
+
+    Heartbeat:
+      type: object
+      additionalProperties: false
+      required: [serverTime, deadlineAt, status, announcements, announcementCursor, hasMoreAnnouncements]
+      properties:
+        serverTime: { $ref: "#/components/schemas/Instant" }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        status: { $ref: "#/components/schemas/MonitoredAttemptStatus" }
+        announcements:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ExamAnnouncement" }
+        announcementCursor: { type: [string, "null"] }
+        hasMoreAnnouncements: { type: boolean }
+
+    MonitoredAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, candidate, attemptNumber, status, connection, lastSeenAt, deadlineAt, currentPosition, questionCount, answeredCount, incidentCount, disruptionCount, latestDisruption]
+      properties:
+        id: { type: string }
+        candidate:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string }
+            name: { type: string }
+        attemptNumber: { type: integer }
+        status: { $ref: "#/components/schemas/MonitoredAttemptStatus" }
+        connection: { type: string, enum: [ONLINE, INTERRUPTED] }
+        lastSeenAt: { $ref: "#/components/schemas/Instant" }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        currentPosition: { type: integer }
+        questionCount: { type: integer }
+        answeredCount: { type: integer }
+        incidentCount: { type: integer }
+        disruptionCount: { type: integer }
+        latestDisruption:
+          type: [object, "null"]
+          required: [startedAt, endedAt]
+          properties:
+            startedAt: { $ref: "#/components/schemas/Instant" }
+            endedAt: { type: [string, "null"], format: date-time }
+
+    ClientIncident:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { type: string, enum: [TAB_HIDDEN, FOCUS_LOST] }
+            details:
+              type: object
+              additionalProperties: false
+              required: [awayMs]
+              properties:
+                awayMs: { type: integer, minimum: 0, maximum: 86400000 }
+        - type: object
+          additionalProperties: false
+          required: [type, details]
+          properties:
+            type: { type: string, enum: [COPY_ATTEMPT, PASTE_ATTEMPT] }
+            details:
+              type: object
+              additionalProperties: false
+              required: [position]
+              properties:
+                position: { type: integer, minimum: 1, maximum: 2147483647 }
+        - type: object
+          additionalProperties: false
+          required: [type, details]
+          properties:
+            type: { type: string, const: DEVTOOLS_SHORTCUT }
+            details:
+              type: object
+              additionalProperties: false
+              required: [key]
+              properties:
+                key: { type: string, enum: [F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Meta+Alt+I, Meta+Alt+J, Meta+Alt+C] }
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { type: string, enum: [FULLSCREEN_EXIT, CONTEXT_MENU, PRINT_SCREEN, EXTRA_DISPLAY] }
+
+    IntegrityReview:
+      type: object
+      required: [note, reviewedById, reviewedAt]
+      properties:
+        note: { type: string }
+        reviewedById: { type: [string, "null"] }
+        reviewedAt: { $ref: "#/components/schemas/Instant" }
+
+    IntegritySummary:
+      type: object
+      required: [attemptId, counts, level, review, signals, nextCursor]
+      properties:
+        attemptId: { type: string }
+        counts:
+          type: object
+          required: [LOW, MEDIUM, HIGH]
+          properties:
+            LOW: { type: integer, minimum: 0 }
+            MEDIUM: { type: integer, minimum: 0 }
+            HIGH: { type: integer, minimum: 0 }
+        level: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        review:
+          oneOf:
+            - { $ref: "#/components/schemas/IntegrityReview" }
+            - { type: "null" }
+        nextCursor: { type: [string, "null"] }
+        signals:
+          type: array
+          items:
+            type: object
+            required: [id, type, source, severity, details, createdAt, position, label]
+            properties:
+              id: { type: string }
+              type: { type: string }
+              source: { type: string, enum: [CLIENT, SERVER] }
+              severity: { type: string, enum: [LOW, MEDIUM, HIGH] }
+              details: {}
+              createdAt: { $ref: "#/components/schemas/Instant" }
+              position: { type: [integer, "null"] }
+              label: { type: string }
 
     UserActivity:
       type: object
@@ -2463,6 +4177,310 @@ components:
           properties:
             joinCode: { $ref: "#/components/schemas/ExamJoinCode" }
 
+    EnrolmentPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [candidate, createdAt]
+            properties:
+              candidate:
+                type: object
+                required: [id, name, email]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  email: { $ref: "#/components/schemas/Email" }
+              createdAt: { $ref: "#/components/schemas/Instant" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    EnrolCandidatesRequest:
+      type: object
+      additionalProperties: false
+      required: [emails]
+      properties:
+        emails:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/Email" }
+    EnrolCandidatesResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [email, status]
+            properties:
+              email: { $ref: "#/components/schemas/Email" }
+              status: { type: string, enum: [ENROLLED, ALREADY_ENROLLED, NOT_A_REGISTERED_CANDIDATE] }
+
+    CreateRetakeGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [candidateId, startsAt, endsAt, reason]
+      properties:
+        candidateId: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        attemptsAllowed: { type: integer, minimum: 1, maximum: 2147483647, default: 1 }
+    RetakeGrant:
+      type: object
+      required: [id, candidateId, startsAt, endsAt, reason, attemptsAllowed, createdAt, revokedAt]
+      properties:
+        id: { type: string }
+        candidateId: { type: string }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        reason: { type: string }
+        attemptsAllowed: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        revokedAt:
+          oneOf:
+            - { $ref: "#/components/schemas/Instant" }
+            - { type: "null" }
+    RetakeGrantPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/RetakeGrant" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    RetakeGrantResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/RetakeGrant" }
+
+    JoinExamRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, description: The 32-character hexadecimal code shared by the examiner. }
+    JoinExamResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [examId, status]
+          properties:
+            examId: { type: string }
+            status: { type: string, enum: [ENROLLED, ALREADY_ENROLLED] }
+
+    CandidateExamSlot:
+      type: object
+      required: [retakeGrantId, startsAt, endsAt, attemptsAllowed, attemptsUsed]
+      properties:
+        retakeGrantId: { type: [string, "null"], description: Null denotes the main slot. }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        attemptsAllowed: { type: [integer, "null"], minimum: 1, description: Null means unlimited. }
+        attemptsUsed: { type: integer, minimum: 0 }
+    CandidateExam:
+      type: object
+      required: [id, title, startsAt, endsAt, durationMinutes, status, attemptsUsed, maxAttempts, totalAttemptsUsed, slot, activeAttemptId, deadlineAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        durationMinutes: { type: integer, minimum: 1 }
+        status: { type: string, enum: [UPCOMING, AVAILABLE, IN_PROGRESS, COMPLETED] }
+        attemptsUsed: { type: integer, minimum: 0, description: Attempts used in the main slot. }
+        maxAttempts: { type: [integer, "null"], minimum: 1, description: Main slot allowance. Null means unlimited. }
+        totalAttemptsUsed: { type: integer, minimum: 0, description: Attempts used across the main and retake slots. }
+        slot:
+          description: Live, available or upcoming slot. Null once no eligible slot remains.
+          oneOf:
+            - { $ref: "#/components/schemas/CandidateExamSlot" }
+            - { type: "null" }
+        activeAttemptId: { type: [string, "null"] }
+        deadlineAt:
+          oneOf:
+            - { $ref: "#/components/schemas/Instant" }
+            - { type: "null" }
+    CandidateExamPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CandidateExam" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    CandidateExamDetailResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/CandidateExam" }
+          required: [instructions, rules, serverTime]
+          properties:
+            instructions: { type: string }
+            rules: { $ref: "#/components/schemas/ExamCandidateRules" }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+
+    StartCandidateAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [rulesAccepted]
+      properties:
+        rulesAccepted: { const: true }
+    CandidateAttemptStatus:
+      type: string
+      enum: [IN_PROGRESS, SUBMITTED, EXPIRED]
+    CandidateAttemptStart:
+      type: object
+      required: [id, examId, attemptNumber, status, isSandbox, retakeGrantId, deadlineAt, questionCount, serverTime]
+      properties:
+        id: { type: string }
+        examId: { type: string }
+        attemptNumber: { type: integer, minimum: 1 }
+        status: { $ref: "#/components/schemas/CandidateAttemptStatus" }
+        isSandbox: { type: boolean }
+        retakeGrantId: { type: [string, "null"] }
+        deadlineAt: { $ref: "#/components/schemas/Instant" }
+        questionCount: { type: integer, minimum: 0 }
+        serverTime: { $ref: "#/components/schemas/Instant" }
+    CandidateAttemptStartResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/CandidateAttemptStart" }
+    CandidateAttemptResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/CandidateAttemptStart" }
+          required: [submittedAt, currentPosition, scratchpad, questions]
+          properties:
+            submittedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+            currentPosition: { type: integer, minimum: 1 }
+            scratchpad: { type: string }
+            questions:
+              type: array
+              items:
+                type: object
+                required: [position, marks, flagged, answered]
+                properties:
+                  position: { type: integer, minimum: 1 }
+                  marks: { type: number }
+                  flagged: { type: boolean }
+                  answered: { type: boolean }
+    CandidateQuestionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [position, type, text, options, marks, answer, aiNotice, honeypot, deadlineAt, serverTime]
+          properties:
+            position: { type: integer, minimum: 1 }
+            type: { type: string, enum: [SINGLE_CHOICE, MULTIPLE_SELECT, WRITTEN] }
+            text: { type: string }
+            options:
+              type: array
+              items:
+                type: object
+                required: [id, text]
+                properties:
+                  id: { type: string }
+                  text: { type: string }
+            marks: { type: number }
+            answer:
+              type: object
+              required: [selectedOptionIds, writtenAnswer, flagged, revision, savedAt, keystrokeCount, pasteCount]
+              properties:
+                selectedOptionIds:
+                  type: array
+                  items: { type: string }
+                writtenAnswer: { type: [string, "null"] }
+                flagged: { type: boolean }
+                revision: { type: integer, minimum: 0 }
+                savedAt:
+                  oneOf:
+                    - { $ref: "#/components/schemas/Instant" }
+                    - { type: "null" }
+                keystrokeCount: { type: integer, minimum: 0 }
+                pasteCount: { type: integer, minimum: 0 }
+            aiNotice: { type: [string, "null"] }
+            honeypot: { type: [string, "null"] }
+            deadlineAt: { $ref: "#/components/schemas/Instant" }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SaveCandidateAnswerRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 2
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 1, maximum: 2147483647 }
+        selectedOptionIds:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        writtenAnswer: { type: [string, "null"], maxLength: 10000 }
+        flagged: { type: boolean }
+        keystrokeCount: { type: integer, minimum: 0, maximum: 2147483647 }
+        pasteCount: { type: integer, minimum: 0, maximum: 2147483647 }
+    SaveCandidateAnswerResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accepted, revision, savedAt, flagged, answered, serverTime]
+          properties:
+            accepted: { type: boolean }
+            revision: { type: integer, minimum: 0 }
+            savedAt:
+              oneOf:
+                - { $ref: "#/components/schemas/Instant" }
+                - { type: "null" }
+            flagged: { type: boolean }
+            answered: { type: boolean }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SaveCandidateScratchpadRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 10000 }
+    SaveCandidateScratchpadResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [text, serverTime]
+          properties:
+            text: { type: string }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+    SubmitCandidateAttemptResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status, submittedAt]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [SUBMITTED, EXPIRED] }
+            submittedAt: { $ref: "#/components/schemas/Instant" }
+
     AuditAction:
       type: string
       description: |
@@ -2480,9 +4498,13 @@ components:
         - USER_SESSIONS_REVOKED
         - USER_SIGN_IN_UNLOCKED
         - ANSWER_GRADED
+        - RESULT_RELEASED
+        - DISPUTE_DECIDED
+        - REPORT_ISSUED
         - EXAM_PUBLISHED
         - EXAM_UNPUBLISHED
         - EXAM_COMPLETED
+        - RETAKE_GRANTED
 
     AuditEntry:
       type: object

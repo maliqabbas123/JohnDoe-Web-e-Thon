@@ -626,6 +626,9 @@ model Report {
   score            Decimal   @db.Decimal(7, 2)
   maxScore         Decimal   @db.Decimal(7, 2)
   contentHash      String
+  examTitle        String?
+  pdfBytes         Bytes?
+  verificationUrl  String?
   issuedById       String
   issuedAt         DateTime  @default(now()) @db.Timestamptz(3)
   supersededAt     DateTime? @db.Timestamptz(3)

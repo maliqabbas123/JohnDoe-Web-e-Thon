@@ -9,7 +9,7 @@ export type QuestionImportRow = { row: number; question: CreateQuestionInput } |
 
 // Yield logical CSV records so commas and newlines inside quoted cells do not
 // affect column counts or the row numbers in the report.
-function* csvRecords(text: string): Generator<string[]> {
+export function* csvRecords(text: string): Generator<string[]> {
   let record: string[] = [];
   let cell = "";
   let state: "unquoted" | "quoted" | "closed" = "unquoted";

@@ -13,16 +13,16 @@ What is built, what is left, and how the remaining work is split so that three p
 | Question bank | Built | 3.3 |
 | Shared paper and scoring rules (`src/server/exam/paper.ts`) | Built | 3.7 |
 | Exams and join-code management | Built | 3.2 |
-| Enrolment, joining by code, retake grants | Not started | 3.4 |
-| Attempts, paper draw, sandbox, scratchpad | Not started | 3.5, 4.3, 4.8, 5.2 |
+| Enrolment, joining by code, retake grants | Built | 3.4 |
+| Attempts, paper draw, sandbox, scratchpad | Built | 3.5, 4.3, 4.8, 5.2 |
 | Grading | Built | 3.7 |
-| Results and analytics | Not started | 3.8, 4.5, 5.2 |
-| Disputes | Not started | 5.4 |
-| Reports and verification | Not started | 4.2, 4.6 |
-| Monitoring, disruptions, announcements | Not started | 3.6, 5.3 |
-| Integrity analysis | Not started | 5.1 |
+| Results and analytics | Built | 3.8, 4.5, 5.2 |
+| Disputes | Built | 5.4 |
+| Reports and verification | Built | 4.2, 4.6 |
+| Monitoring, disruptions, announcements | Built | 3.6, 5.3 |
+| Integrity analysis | Built | 5.1 |
 | Question import | Built | 4.4 |
-| Candidate import | Not started | 4.4 |
+| Candidate import | Built | 4.4 |
 | Workspace preferences | Built | 4.7 |
 | Deployment | Not started | 07 |
 
@@ -225,7 +225,7 @@ Rules: a gap in contact of more than 45 seconds opens a `Disruption` row and set
 
 ### C5. Candidate import
 
-`POST /import/candidates` creates candidate accounts from a file and enrols them in an exam. It depends on enrolment from stream A and on the open question about first passwords in section 7.
+`POST /import/candidates` creates candidate accounts from a file and enrols them in an exam. The upload returns a generated first password once for each new account. Existing active candidates keep their account and password.
 
 ## 7. Open questions for the product owner
 
@@ -233,7 +233,7 @@ Rules: a gap in contact of more than 45 seconds opens a `Disruption` row and set
 |---|---|---|
 | 1 | The frontend prototype has an administrator screen that extends exam time after an outage. The agreed rule is that the deadline never moves. Which stands? | Affects monitoring and the 5.3 write-up |
 | 2 | The prototype has the administrator arbitrating disputes referred by an examiner. The agreed rule is that the examiner alone decides, with no appeal. Which stands? | Affects the disputes module |
-| 3 | How does an imported candidate get a first password: a column in the file, a generated one shown once, or an activation link? | Blocks candidate import |
+| 3 | Imported candidates receive a generated first password. The examiner sees it in the upload response and delivers it privately. | Resolved |
 | 4 | Is a forgotten-password flow needed? There is no email service; today an administrator resets passwords | The prototype has the screens |
 | 5 | Are platform settings (session length, password rules) wanted as editable values? | The prototype has the screen |
 | 6 | Where is the application deployed, and from which accounts? | Required for submission |

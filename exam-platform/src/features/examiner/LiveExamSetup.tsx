@@ -1,18 +1,17 @@
 'use client'
 
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Badge, Button, Heading, Panel, Stats } from '@/components/shared'
 import { ApiError, api } from '@/lib/api'
 import { LiveExamDifficultyRules, LiveExamPaper } from './LiveExamPaper'
 import { LiveExamSettings } from './LiveExamSettings'
+import { LiveExamNav } from './LiveExamNav'
 import {
   examApiPath,
   examDifficultyLabels,
   examErrorDetails,
   examErrorMessage,
-  examPagePath,
   examStates,
   type ExamDetail,
   type ExamDifficultyRule,
@@ -130,7 +129,6 @@ function ExamSetupEditor({
   } | null>(null)
   const [notice, setNotice] = useState('')
   const endpoint = examApiPath(exam.id)
-  const page = examPagePath(exam.id)
   const paperLocked = exam.state === 'ONGOING' || exam.state === 'COMPLETED'
   const dirty = settingsDirty || poolDirty || rulesDirty
 
@@ -297,22 +295,9 @@ function ExamSetupEditor({
           </>
         }
       />
-      <nav className="exam-nav" aria-label="Examination tools">
-        <Link
-          href={page + '/setup'}
-          aria-current={paperFirst ? undefined : 'page'}
-        >
-          Setup
-        </Link>
-        <Link
-          href={page + '/blueprint'}
-          aria-current={paperFirst ? 'page' : undefined}
-        >
-          Paper blueprint
-        </Link>
+      <LiveExamNav id={exam.id} current={paperFirst ? 'blueprint' : 'setup'}>
         <a href="#exam-review">Review and publication</a>
-        <Link href={page + '/enrolment'}>Enrolment and retakes</Link>
-      </nav>
+      </LiveExamNav>
       {feedback && (
         <Panel>
           <div className="danger" role="alert">

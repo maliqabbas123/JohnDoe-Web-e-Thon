@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   Radio,
+  ScrollText,
   Scale,
   ScanLine,
   Settings,
@@ -64,6 +65,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 const nav = {
   Administrator: [
     ['Overview', '/admin', LayoutDashboard],
+    ['Audit log', '/admin/audit-logs', ScrollText],
     ['Exam oversight', '/admin/oversight', Activity],
     ['Outage management', '/admin/outages', Radio],
     ['Escalated disputes', '/admin/disputes', Scale],
