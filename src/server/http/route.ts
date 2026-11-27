@@ -27,17 +27,16 @@ export function route<Context = unknown>(handler: Handler<Context>) {
   };
 }
 
-// Largest JSON body the API accepts. Every legitimate request is far smaller;
-// the limit stops a client from tying up memory with an oversized payload.
+// Default body limit for JSON requests. Bulk routes can supply their own limit.
 const MAX_JSON_BYTES = 64 * 1024;
 
 // Parses a JSON body, rejecting anything oversized or not valid JSON.
-export async function readJson(request: NextRequest): Promise<unknown> {
+export async function readJson(request: NextRequest, maxBytes = MAX_JSON_BYTES): Promise<unknown> {
   const declared = Number(request.headers.get("content-length") ?? 0);
-  if (declared > MAX_JSON_BYTES) throw errors.payloadTooLarge();
+  if (declared > maxBytes) throw errors.payloadTooLarge();
 
   const text = await request.text();
-  if (Buffer.byteLength(text) > MAX_JSON_BYTES) throw errors.payloadTooLarge();
+  if (Buffer.byteLength(text) > maxBytes) throw errors.payloadTooLarge();
   // PostgreSQL text cannot hold a NUL character; refuse it here, raw or as
   // a JSON escape, so it never reaches a query.
   if (text.includes("\u0000") || /\\u0000/i.test(text)) {

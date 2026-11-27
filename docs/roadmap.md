@@ -13,7 +13,7 @@ What is built, what is left, and how the remaining work is split so that three p
 | Question bank | Built | 3.3 |
 | Shared paper and scoring rules (`src/server/exam/paper.ts`) | Built | 3.7 |
 | Exams and join-code management | Built | 3.2 |
-| Enrolment, joining by code, retake grants | Not started | 3.4 |
+| Enrolment, joining by code, retake grants | Built | 3.4 |
 | Attempts, paper draw, sandbox, scratchpad | Not started | 3.5, 4.3, 4.8, 5.2 |
 | Grading | Built | 3.7 |
 | Results and analytics | Not started | 3.8, 4.5, 5.2 |

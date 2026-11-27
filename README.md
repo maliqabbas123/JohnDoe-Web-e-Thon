@@ -86,6 +86,7 @@ New candidates and examiners can register with `POST /api/v1/auth/signup` (`emai
 | Grading | Built |
 | Exams (drafts, paper review, publication and join codes) | Built |
 | Candidate workspace preferences | Built |
-| Enrolment, attempts, monitoring, grading, results, reports, candidate import, disputes, integrity | Designed, not built |
+| Enrolment (rosters, joining by code and retake grants) | Built |
+| Attempts, monitoring, results, reports, candidate import, disputes, integrity | Designed, not built |
 
 The innovation challenge write-up is added with the modules that implement it.

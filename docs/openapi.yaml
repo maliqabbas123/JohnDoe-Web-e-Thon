@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Secure Examination Management System API
-  version: 0.10.0
+  version: 0.11.0
   summary: Backend API for creating, conducting, monitoring and evaluating online examinations.
   description: |
     This document covers the endpoints that are **built and tested**. Planned
@@ -91,6 +91,8 @@ tags:
     description: Exam configuration and publication. Examiner only.
   - name: Workspace
     description: A candidate’s saved exam workspace settings.
+  - name: Enrolment
+    description: Exam rosters, retake slots and candidate availability.
   - name: Admin
     description: Platform oversight. Administrator only. Returns counts and account data, never examination content.
 
@@ -1269,6 +1271,184 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /exams/{id}/enrollments:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: listExamEnrolments
+      summary: List an exam's enrolled candidates
+      description: |
+        **UI notes:** Page through this exam's roster to display candidates and their enrolment dates. Rows are ordered by candidate ID.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List an exam's enrolled candidates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnrolmentPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Enrolment]
+      operationId: enrolExamCandidates
+      summary: Enrol candidates by email
+      description: |
+        **UI notes:** Send 1–500 email addresses, with a body up to 128 KiB. Results follow input order and use normalized emails. Duplicate entries after a successful enrolment report ALREADY_ENROLLED. Unknown emails and non-candidate accounts both report NOT_A_REGISTERED_CANDIDATE. A candidate can see the exam once it is published.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnrolCandidatesRequest" }
+      responses:
+        "200":
+          description: Enrol candidates by email.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnrolCandidatesResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/EnrolmentPayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /exams/{id}/enrollments/{candidateId}:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+      - { $ref: "#/components/parameters/EnrolmentCandidateId" }
+    delete:
+      tags: [Enrolment]
+      operationId: removeExamEnrolment
+      summary: Remove an unused enrolment
+      description: |
+        **UI notes:** Send the candidate ID from the roster. Removal also clears the candidate's retake grants for that exam. A 409 means the candidate has already attempted it. A 204 has no body.
+      responses:
+        "204":
+          description: Remove an unused enrolment.
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/EnrolmentConflict" }
+
+  /exams/{id}/retake-grants:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: listExamRetakeGrants
+      summary: List an exam's retake grants
+      description: |
+        **UI notes:** Show the examiner's history in newest-first order, including revoked grants. revokedAt is null on grants that have not been withdrawn.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List an exam's retake grants.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetakeGrantPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    post:
+      tags: [Enrolment]
+      operationId: createExamRetakeGrant
+      summary: Give a candidate an extra exam slot
+      description: |
+        **UI notes:** Select a candidate from the roster, send the start and end instants and give a written reason. This slot has its own attempt allowance, which defaults to one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRetakeGrantRequest" }
+      responses:
+        "201":
+          description: Give a candidate an extra exam slot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetakeGrantResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/exams:
+    get:
+      tags: [Enrolment]
+      operationId: listCandidateExams
+      summary: List the candidate's exams
+      description: |
+        **UI notes:** Show the candidate's current status and next eligible slot for each exam. Enrolled drafts become visible on publication. Link each row to the detail endpoint for the rules and server time.
+      parameters:
+        - { $ref: "#/components/parameters/EnrolmentPageNumber" }
+        - { $ref: "#/components/parameters/EnrolmentPageSize" }
+      responses:
+        "200":
+          description: List the candidate's exams.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateExamPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /me/exams/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ExamId" }
+    get:
+      tags: [Enrolment]
+      operationId: getCandidateExam
+      summary: Read a candidate's exam and rules
+      description: |
+        **UI notes:** Use this screen to show instructions, rules, and availability before an attempt. A slot starts at startsAt and closes at endsAt. A live attempt takes priority, then the open main slot, then the available retake with the earliest end. Upcoming slots are ordered by start. Use serverTime with deadlineAt for a live attempt.
+      responses:
+        "200":
+          description: Read a candidate's exam and rules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CandidateExamDetailResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/exams/join:
+    post:
+      tags: [Enrolment]
+      operationId: joinExamByCode
+      summary: Join a published exam with a code
+      description: |
+        **UI notes:** Send the code shared by the examiner. Leading and trailing whitespace and hex letter case are normalized. Treat invalid, rotated, disabled, draft and closed codes as the same 404. On either 200 outcome, use examId to load the exam. A candidate can submit ten codes per 15 minutes. Use Retry-After on 429.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JoinExamRequest" }
+      responses:
+        "200":
+          description: Join a published exam with a code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JoinExamResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /admin/overview:
     get:
       tags: [Admin]
@@ -1570,7 +1750,32 @@ components:
       description: The attempt's id.
       schema: { type: string, maxLength: 64 }
 
+    EnrolmentCandidateId:
+      name: candidateId
+      in: path
+      required: true
+      description: Candidate ID from the exam roster.
+      schema: { type: string, maxLength: 64 }
+    EnrolmentPageNumber:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 }
+    EnrolmentPageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
   responses:
+    EnrolmentConflict:
+      description: The candidate has already attempted this exam.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    EnrolmentPayloadTooLarge:
+      description: The enrolment request is larger than 128 KiB.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     ExamConflict:
       description: The current exam state or mode prevents this action.
       content:
@@ -2463,6 +2668,157 @@ components:
           properties:
             joinCode: { $ref: "#/components/schemas/ExamJoinCode" }
 
+    EnrolmentPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [candidate, createdAt]
+            properties:
+              candidate:
+                type: object
+                required: [id, name, email]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  email: { $ref: "#/components/schemas/Email" }
+              createdAt: { $ref: "#/components/schemas/Instant" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    EnrolCandidatesRequest:
+      type: object
+      additionalProperties: false
+      required: [emails]
+      properties:
+        emails:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/Email" }
+    EnrolCandidatesResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [email, status]
+            properties:
+              email: { $ref: "#/components/schemas/Email" }
+              status: { type: string, enum: [ENROLLED, ALREADY_ENROLLED, NOT_A_REGISTERED_CANDIDATE] }
+
+    CreateRetakeGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [candidateId, startsAt, endsAt, reason]
+      properties:
+        candidateId: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        attemptsAllowed: { type: integer, minimum: 1, maximum: 2147483647, default: 1 }
+    RetakeGrant:
+      type: object
+      required: [id, candidateId, startsAt, endsAt, reason, attemptsAllowed, createdAt, revokedAt]
+      properties:
+        id: { type: string }
+        candidateId: { type: string }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        reason: { type: string }
+        attemptsAllowed: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Instant" }
+        revokedAt:
+          oneOf:
+            - { $ref: "#/components/schemas/Instant" }
+            - { type: "null" }
+    RetakeGrantPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/RetakeGrant" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    RetakeGrantResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/RetakeGrant" }
+
+    JoinExamRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, description: The 32-character hexadecimal code shared by the examiner. }
+    JoinExamResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [examId, status]
+          properties:
+            examId: { type: string }
+            status: { type: string, enum: [ENROLLED, ALREADY_ENROLLED] }
+
+    CandidateExamSlot:
+      type: object
+      required: [retakeGrantId, startsAt, endsAt, attemptsAllowed, attemptsUsed]
+      properties:
+        retakeGrantId: { type: [string, "null"], description: Null denotes the main slot. }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        attemptsAllowed: { type: [integer, "null"], minimum: 1, description: Null means unlimited. }
+        attemptsUsed: { type: integer, minimum: 0 }
+    CandidateExam:
+      type: object
+      required: [id, title, startsAt, endsAt, durationMinutes, status, attemptsUsed, maxAttempts, totalAttemptsUsed, slot, activeAttemptId, deadlineAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        startsAt: { $ref: "#/components/schemas/Instant" }
+        endsAt: { $ref: "#/components/schemas/Instant" }
+        durationMinutes: { type: integer, minimum: 1 }
+        status: { type: string, enum: [UPCOMING, AVAILABLE, IN_PROGRESS, COMPLETED] }
+        attemptsUsed: { type: integer, minimum: 0, description: Attempts used in the main slot. }
+        maxAttempts: { type: [integer, "null"], minimum: 1, description: Main slot allowance. Null means unlimited. }
+        totalAttemptsUsed: { type: integer, minimum: 0, description: Attempts used across the main and retake slots. }
+        slot:
+          description: Live, available or upcoming slot. Null once no eligible slot remains.
+          oneOf:
+            - { $ref: "#/components/schemas/CandidateExamSlot" }
+            - { type: "null" }
+        activeAttemptId: { type: [string, "null"] }
+        deadlineAt:
+          oneOf:
+            - { $ref: "#/components/schemas/Instant" }
+            - { type: "null" }
+    CandidateExamPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/CandidateExam" }
+        meta: { $ref: "#/components/schemas/PageMeta" }
+    CandidateExamDetailResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/CandidateExam" }
+          required: [instructions, rules, serverTime]
+          properties:
+            instructions: { type: string }
+            rules: { $ref: "#/components/schemas/ExamCandidateRules" }
+            serverTime: { $ref: "#/components/schemas/Instant" }
+
     AuditAction:
       type: string
       description: |
@@ -2483,6 +2839,7 @@ components:
         - EXAM_PUBLISHED
         - EXAM_UNPUBLISHED
         - EXAM_COMPLETED
+        - RETAKE_GRANTED
 
     AuditEntry:
       type: object

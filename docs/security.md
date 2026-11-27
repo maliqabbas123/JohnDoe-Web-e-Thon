@@ -54,12 +54,12 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Information disclosure | Reading another candidate’s workspace preferences | Both routes require the candidate role and use the signed-in user ID for the database lookup | Built |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
-| Denial of service | Flooding sign-in, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change and question import; Planned for autosave and candidate import |
-| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Question imports are capped at 512 KiB and 100 rows. Requests over either limit receive 413 | Built |
+| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining and question import; Planned for autosave and candidate import |
+| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Requests over either limit receive 413 | Built |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
-| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams and grading |
+| Elevation of privilege | Candidate calling examiner or administrator endpoints | Role guard on every handler; deny by default | Built for user management, question banks, exams, enrolment and grading |
 | Elevation of privilege | Examiner acting on another examiner's exam | Ownership check in every service | Built for exam management and grading; planned for other exam modules |
 | Elevation of privilege | Cross-site request forgery | `SameSite` cookie and an origin check on every state-changing request | Built |
 
@@ -67,7 +67,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 
 | Risk | How it is addressed | Status |
 |---|---|---|
-| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams and grading |
+| A01 Broken access control | Role guards, ownership checks, deny by default, no client-supplied identity | Built for user management, question banks, exams, enrolment and grading |
 | A02 Cryptographic failures | scrypt for passwords, SHA-256 token hashes, HTTPS in production, no secrets in the repository | Built |
 | A03 Injection | Prisma parameterised queries, Zod validation, no HTML rendering of user content by the API | Built (queries) |
 | A04 Insecure design | Threat model, decision records, server-authoritative time, frozen papers, idempotent operations | Built (design) |
@@ -75,7 +75,7 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | A06 Vulnerable components | Lockfile committed; all dependencies audited on every pull request, which fails on a high-severity advisory | Built |
 | A07 Identification and authentication failures | Rate-limited sign-in, revocable sessions, no default passwords outside seeded test accounts | Built |
 | A08 Software and data integrity failures | Lockfile, migrations in version control, report content hashes | Built (lockfile, migrations) |
-| A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in, user changes, exam lifecycle and manual grading |
+| A09 Logging and monitoring failures | Audit log for sensitive actions, readable by administrators with filters; server logs for unexpected errors | Built for sign-in, user changes, exam lifecycle, retake grants and manual grading |
 | A10 Server-side request forgery | The server makes no outbound requests | Built (by design) |
 
 ## 5. Examination integrity
