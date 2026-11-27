@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { ClientRedirect } from '../../components/auth/RoleGuard'
 import { Button, Heading, Panel } from '../../components/shared'
+import {
+  accommodatedDeadline,
+  approvedAccommodation,
+} from '../../context/accommodations'
 import { newAttempt, serverNow } from '../../context/MockStoreContext'
 
 import { Missing, useExam } from './shared'
@@ -13,6 +17,7 @@ export function IntegrityNoticePage() {
   const { exam, base, user, attempt, update, state } = useExam(),
     [ok, set] = useState(false),
     [starting, setStarting] = useState(false),
+    [error, setError] = useState(''),
     router = useRouter()
   if (!exam) return <Missing />
   if (starting) return <p role="status">Opening your timed examination…</p>
@@ -51,21 +56,51 @@ export function IntegrityNoticePage() {
           />{' '}
           I have read and acknowledge the integrity notice.
         </label>
+        {error && (
+          <p className="danger" role="alert">
+            {error}
+          </p>
+        )}
         <Button
           disabled={!ok || !available || !navigator.onLine}
           onClick={() => {
             setStarting(true)
-            update((s) => {
-              if (
-                !s.attempts.some(
-                  (a) => a.exam === exam.id && a.user === user!.id,
-                )
-              ) {
-                const a = newAttempt(exam, user!.id, serverNow(), s.questions)
-                a.end = Math.min(a.end, new Date(exam.close).getTime())
-                s.attempts.push(a)
+            let canEnter = false
+            update((draft) => {
+              const current = draft.exams.find(
+                (record) => record.id === exam.id,
+              )
+              const at = serverNow()
+              if (!current?.candidates.includes(user!.id)) return
+              const existing = draft.attempts.find(
+                (record) =>
+                  record.exam === current.id && record.user === user!.id,
+              )
+              if (existing) {
+                canEnter = !existing.submitted
+                return
               }
+              if (
+                current.status !== 'Ongoing' ||
+                at < new Date(current.date).getTime() ||
+                at > new Date(current.close).getTime()
+              )
+                return
+
+              const attempt = newAttempt(current, user!.id, at, draft.questions)
+              const extraMinutes =
+                approvedAccommodation(draft, current.id, user!.id)
+                  ?.extraMinutes ?? 0
+              attempt.accommodationMinutes = extraMinutes
+              attempt.end = accommodatedDeadline(current, at, extraMinutes)
+              draft.attempts.push(attempt)
+              canEnter = true
             })
+            if (!canEnter) {
+              setError('The examination is no longer available to start.')
+              setStarting(false)
+              return
+            }
             router.replace(base + '/attempt')
           }}
         >

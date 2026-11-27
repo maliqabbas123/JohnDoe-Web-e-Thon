@@ -40,6 +40,13 @@ export function CandidatePortalPage() {
                       (a) => a.exam === exam.id && a.user === user!.id,
                     )
                     if (
+                      exam.status === 'Ongoing' &&
+                      attempt &&
+                      !attempt.submitted &&
+                      attempt.end > serverNow()
+                    )
+                      return group === 'Available'
+                    if (
                       attempt?.submitted ||
                       exam.status === 'Completed' ||
                       serverNow() > new Date(exam.close).getTime()

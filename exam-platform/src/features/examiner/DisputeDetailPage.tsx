@@ -44,7 +44,7 @@ export function DisputeDetailPage() {
         adjustment +
         ' · ' +
         note.trim()
-      w.revisions.push({ at: serverNow(), summary })
+      w.revisions.push({ at: serverNow(), summary, status })
       s.audit.unshift({ at: serverNow(), type: 'Dispute', message: summary })
     })
     toast('Dispute revision saved.')
@@ -58,6 +58,12 @@ export function DisputeDetailPage() {
         <Panel title={d.type}>
           <p>{d.claim}</p>
           <Badge>{d.status}</Badge>
+          {d.evidence && (
+            <>
+              <h3>Candidate evidence</h3>
+              <p className="whitespace-pre-wrap">{d.evidence}</p>
+            </>
+          )}
           {q && (
             <>
               <h3>Contested question</h3>

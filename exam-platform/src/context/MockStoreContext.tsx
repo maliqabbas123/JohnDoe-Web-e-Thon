@@ -263,10 +263,21 @@ const seed: State = {
       question: 'q3',
       type: 'Grading appeal',
       claim: 'Please review how the confounding variable example was scored.',
+      evidence:
+        'My response used temperature as a common cause of ice cream sales and swimming injuries.',
       status: 'Escalated',
       notes: 'Escalated after initial examiner review.',
       revisions: [
-        { at: now - 86400000, summary: 'Escalated to administrator' },
+        {
+          at: now - 2 * 86400000,
+          summary: 'Submitted by candidate',
+          status: 'Open',
+        },
+        {
+          at: now - 86400000,
+          summary: 'Escalated to administrator',
+          status: 'Escalated',
+        },
       ],
     },
   ],
@@ -291,6 +302,16 @@ const seed: State = {
     },
   ],
   outages: [],
+  accommodations: [
+    {
+      exam: 'e1',
+      user: 'u3',
+      extraMinutes: 15,
+      approvedAt: now - 2 * 86400000,
+      note: 'Your scheduled assessment includes 15 additional minutes.',
+    },
+  ],
+  cohortReports: [],
   policy: {
     timeout: 60,
     password: 8,
@@ -358,7 +379,17 @@ const stateKey = 'proctorate.data.v1',
   sessionKey = 'proctorate.session.v1'
 function readState(): State {
   try {
-    return JSON.parse(localStorage.getItem(stateKey) ?? 'null') ?? seed
+    const saved: State | null = JSON.parse(
+      localStorage.getItem(stateKey) ?? 'null',
+    )
+    if (!saved) return seed
+    saved.accommodations ??= seed.accommodations?.filter((entry) =>
+      saved.exams.some(
+        (exam) =>
+          exam.id === entry.exam && exam.candidates.includes(entry.user),
+      ),
+    )
+    return saved
   } catch {
     return seed
   }

@@ -21,7 +21,8 @@ export function ExamResultScorecardPage() {
     [open, set] = useState(false),
     [question, setQuestion] = useState(''),
     [type, setType] = useState('Grading appeal'),
-    [claim, setClaim] = useState('')
+    [claim, setClaim] = useState(''),
+    [evidence, setEvidence] = useState('')
   if (!exam?.released || !attempt?.submitted || attempt.pending)
     return <Missing />
   const result = finalScore(exam, attempt, state.questions),
@@ -73,15 +74,21 @@ export function ExamResultScorecardPage() {
                   question,
                   type,
                   claim: claim.trim(),
+                  evidence: evidence.trim() || undefined,
                   status: 'Open',
                   notes: '',
                   revisions: [
-                    { at: serverNow(), summary: 'Submitted by candidate' },
+                    {
+                      at: serverNow(),
+                      summary: 'Submitted by candidate',
+                      status: 'Open',
+                    },
                   ],
                 }),
               )
               set(false)
               setClaim('')
+              setEvidence('')
               toast('Dispute submitted.')
             }}
           >
@@ -114,6 +121,13 @@ export function ExamResultScorecardPage() {
                 required
                 value={claim}
                 onChange={(e) => setClaim(e.target.value)}
+              />
+            </Field>
+            <Field label="Supporting details (optional)">
+              <textarea
+                maxLength={2000}
+                value={evidence}
+                onChange={(event) => setEvidence(event.target.value)}
               />
             </Field>
             <Button type="submit">Submit dispute</Button>

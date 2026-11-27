@@ -121,9 +121,7 @@ export function ExamResultsHubPage() {
                   )}
                   total={exam.total}
                 />
-                <Button onClick={() => print()}>
-                  Export cohort PDF report
-                </Button>
+                <Button to={base + '/reports'}>Cohort PDF reports</Button>
               </>
             )
           }
