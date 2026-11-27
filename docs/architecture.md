@@ -147,7 +147,7 @@ The administrator operates the platform and the examiner runs examinations. The 
 | Module | Responsibility | Brief |
 |---|---|---|
 | auth | Sign-up, sign-in, sign-out, current user, password change, sessions | 3.1 |
-| users | Administrator manages accounts, roles and activation | 3.1 |
+| users | Administrator manages accounts, roles and activation; views a user's sessions and history; forces sign-out; lifts sign-in lockouts | 3.1 |
 | admin | Platform overview and audit log viewer, for the administrator only | 3.1 |
 | questions | Topics, questions, options, difficulty labels, archive | 3.3 |
 | exams | Configuration, pool, difficulty mix, lifecycle, pre-publish review, rules for candidates | 3.2 |

@@ -6,6 +6,7 @@ import { revokeUserSessions, type SessionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { errors } from "@/server/http/errors";
 import type { ClientInfo } from "@/server/security/client";
+import { clearSignInLock, signInLockedUntil } from "@/server/security/rate-limit";
 import type { CreateUserInput, ListUsersInput, UpdateUserInput } from "./schemas";
 
 // The only user fields that ever leave the server. The password hash is
@@ -157,5 +158,105 @@ export async function updateUser(
     );
 
     return user;
+  });
+}
+
+const ACTIVITY_LIMIT = 20;
+const SIGN_IN_ACTIONS = ["LOGIN_SUCCEEDED", "LOGIN_FAILED"];
+const ACCOUNT_ACTIONS = [
+  "USER_SIGNED_UP",
+  "USER_CREATED",
+  "USER_UPDATED",
+  "PASSWORD_CHANGED",
+  "USER_SESSIONS_REVOKED",
+  "USER_SIGN_IN_UNLOCKED",
+];
+
+// Everything an administrator needs to answer "what is going on with this
+// account?": who is signed in, recent sign-in attempts, and changes to the
+// account. Session tokens and hashes are never selected.
+export async function getUserActivity(id: string) {
+  const user = await db.user.findUnique({ where: { id }, select: { email: true } });
+  if (!user) throw errors.notFound("User not found.");
+
+  const now = new Date();
+  const history = (actions: string[]) =>
+    db.auditLog.findMany({
+      where: { entityType: "User", entityId: id, action: { in: actions } },
+      select: {
+        id: true,
+        action: true,
+        metadata: true,
+        ip: true,
+        createdAt: true,
+        actor: { select: { id: true, name: true, email: true, role: true } },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: ACTIVITY_LIMIT,
+    });
+
+  const [sessions, signIns, accountChanges, lockedUntil] = await Promise.all([
+    db.session.findMany({
+      where: { userId: id, revokedAt: null, expiresAt: { gt: now } },
+      select: { id: true, createdAt: true, lastSeenAt: true, expiresAt: true, ip: true, userAgent: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    history(SIGN_IN_ACTIONS),
+    history(ACCOUNT_ACTIONS),
+    signInLockedUntil(user.email),
+  ]);
+
+  return {
+    sessions,
+    signInLock: { locked: lockedUntil !== null, until: lockedUntil },
+    signIns: signIns.map(({ id: entryId, action, ip, createdAt }) => ({
+      id: entryId,
+      succeeded: action === "LOGIN_SUCCEEDED",
+      ip,
+      createdAt,
+    })),
+    accountChanges,
+  };
+}
+
+// Signs the user out everywhere. Used when an account may be compromised or
+// a candidate must be moved off a device.
+export async function revokeSessions(actor: SessionUser, id: string, client: ClientInfo): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const target = await tx.user.findUnique({ where: { id }, select: { id: true } });
+    if (!target) throw errors.notFound("User not found.");
+
+    const { count } = await tx.session.updateMany({
+      where: { userId: id, revokedAt: null, expiresAt: { gt: new Date() } },
+      data: { revokedAt: new Date() },
+    });
+    await writeAudit(
+      {
+        actorId: actor.id,
+        action: "USER_SESSIONS_REVOKED",
+        entityType: "User",
+        entityId: id,
+        metadata: { sessionsEnded: count },
+        ip: client.ip,
+      },
+      tx,
+    );
+  });
+}
+
+// Lifts a sign-in lockout caused by repeated failed attempts, for example a
+// candidate locked out minutes before an exam. The password is not changed.
+export async function unlockSignIn(actor: SessionUser, id: string, client: ClientInfo): Promise<void> {
+  const target = await db.user.findUnique({ where: { id }, select: { email: true } });
+  if (!target) throw errors.notFound("User not found.");
+
+  const cleared = await clearSignInLock(target.email);
+  await writeAudit({
+    actorId: actor.id,
+    action: "USER_SIGN_IN_UNLOCKED",
+    entityType: "User",
+    entityId: id,
+    metadata: { countersCleared: cleared },
+    ip: client.ip,
   });
 }

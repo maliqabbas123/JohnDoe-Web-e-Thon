@@ -64,6 +64,9 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `POST /auth/change-password` | A E C | Change own password |
 | Users | `GET /users`, `POST /users` | A | List and create accounts |
 | | `GET /users/{id}`, `PATCH /users/{id}` | A | Read; change name, role, activation, password |
+| | `GET /users/{id}/activity` | A | Active sessions, sign-in history, account changes, sign-in lock |
+| | `DELETE /users/{id}/sessions` | A | Sign the user out everywhere |
+| | `DELETE /users/{id}/sign-in-lock` | A | Lift a lockout from failed sign-ins |
 | Admin | `GET /admin/overview` | A | Platform counts: users, exams, attempts, disputes, sessions, failed sign-ins |
 | | `GET /admin/audit-logs` | A | Audit log with filters by actor, action, record and time range; cursor paging |
 | Questions | `GET /topics`, `POST /topics` | E | Topics in own bank |

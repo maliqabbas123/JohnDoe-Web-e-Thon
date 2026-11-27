@@ -4,6 +4,31 @@ import { errors } from "../http/errors";
 
 type Limit = { limit: number; windowSeconds: number };
 
+// Sign-in attempts for one account from one address.
+export const SIGN_IN_ACCOUNT_LIMIT: Limit = { limit: 5, windowSeconds: 15 * 60 };
+export const signInAccountKey = (address: string, email: string) => `login:${address}:${email}`;
+
+const escapeLike = (text: string) => text.replace(/[\\%_]/g, "\\$&");
+// Matches the account's counter for every address. The address-only counter
+// ("login:<address>") has no email suffix and is never matched.
+const signInKeyPattern = (email: string) => `login:%:${escapeLike(email)}`;
+
+// When the account is locked out of sign-in, the time the lock ends.
+export async function signInLockedUntil(email: string): Promise<Date | null> {
+  const rows = await db.$queryRaw<{ until: Date }[]>`
+    SELECT max("resetAt") AS "until"
+    FROM "RateLimit"
+    WHERE "key" LIKE ${signInKeyPattern(email)}
+      AND "count" >= ${SIGN_IN_ACCOUNT_LIMIT.limit}
+      AND "resetAt" > now()
+  `;
+  return rows[0]?.until ?? null;
+}
+
+export async function clearSignInLock(email: string): Promise<number> {
+  return db.$executeRaw`DELETE FROM "RateLimit" WHERE "key" LIKE ${signInKeyPattern(email)}`;
+}
+
 // Fixed-window counter in PostgreSQL. One atomic statement increments the
 // counter or starts a new window, so the limit holds across concurrent
 // requests and across serverless instances.
