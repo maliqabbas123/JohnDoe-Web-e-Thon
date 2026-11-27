@@ -16,7 +16,11 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { home, useStore } from '../../context/MockStoreContext'
+import { home } from '../../context/MockStoreContext'
+import { useAuth } from '@/context/AuthContext'
+import { isLive } from '@/lib/api'
+import { isDemoPublicRoute, isLiveDashboardRoute } from '@/lib/liveRoutes'
+import { Unavailable } from '../auth/Unavailable'
 import { Button } from '../shared'
 export function Brand() {
   return (
@@ -29,28 +33,29 @@ export function Brand() {
   )
 }
 export function PublicLayout({ children }: { children: ReactNode }) {
-  const { user } = useStore()
+  const { user } = useAuth()
+  const pathname = usePathname()
   return (
     <div className="public-shell">
       <header className="public-header">
         <div className="public-width">
           <Brand />
           <nav aria-label="Public navigation">
-            <Link href="/verify">
-              <ScanLine size={17} /> Verify a result
-            </Link>
+            {!isLive && (
+              <Link href="/verify"><ScanLine size={17} /> Verify a result</Link>
+            )}
             <Button secondary to={user ? home(user.role) : '/login'}>
               {user ? 'Dashboard' : 'Sign in'}
             </Button>
           </nav>
         </div>
       </header>
-      {children}
+      {isLive && isDemoPublicRoute(pathname) ? <Unavailable href="/" /> : children}
       <footer>
         <div className="public-width">
           <Brand />
           <span>Secure Examination Management</span>
-          <Link href="/verify">Public verification</Link>
+          {!isLive && <Link href="/verify">Public verification</Link>}
         </div>
       </footer>
     </div>
@@ -74,19 +79,33 @@ const nav = {
   ],
 } as const
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { user, logout } = useStore(),
+  const { user, logout } = useAuth(),
     [open, setOpen] = useState(false),
     [profile, setProfile] = useState(false),
+    [signingOut, setSigningOut] = useState(false),
+    [error, setError] = useState(''),
     router = useRouter(),
     pathname = usePathname()
   if (!user) return null
+  async function signOut() {
+    setSigningOut(true)
+    setError('')
+    try {
+      await logout()
+      router.replace('/')
+    } catch {
+      setError('Could not sign out. Try again.')
+    } finally {
+      setSigningOut(false)
+    }
+  }
   return (
     <div className="dashboard">
       <aside className={'sidebar ' + (open ? 'expanded' : '')}>
         <Brand />
         <small>WORKSPACE</small>
         <nav aria-label={user.role + ' navigation'}>
-          {nav[user.role].map(([label, to, Icon]) => (
+          {nav[user.role].filter(([, to]) => !isLive || isLiveDashboardRoute(to)).map(([label, to, Icon]) => (
             <Link
               key={to}
               href={to}
@@ -103,11 +122,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="sidebar-bottom">
+        {!isLive && <div className="sidebar-bottom">
           <Link href="/verify">
             <ScanLine size={17} /> Public verification
           </Link>
-        </div>
+        </div>}
       </aside>
       <div className="dashboard-main">
         <header className="dashboard-top">
@@ -144,18 +163,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <div className="profile-menu">
                 <button
                   className="button secondary"
-                  onClick={() => {
-                    logout()
-                    router.replace('/')
-                  }}
+                  disabled={signingOut}
+                  onClick={signOut}
                 >
                   <LogOut size={16} /> Sign out
                 </button>
+                {error && <p role="alert" className="danger">{error}</p>}
               </div>
             )}
           </div>
         </header>
-        <main className="dashboard-content">{children}</main>
+        <main className="dashboard-content">
+          {isLive && !isLiveDashboardRoute(pathname) ? <Unavailable href={home(user.role)} /> : children}
+        </main>
       </div>
     </div>
   )
