@@ -1,13 +1,36 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
+import { errors } from "@/server/http/errors";
 import type { ListAuditLogsInput } from "./schemas";
+
+// A cursor is the (createdAt, id) of the last entry on the previous page,
+// encoded so clients treat it as opaque.
+type Position = { createdAt: Date; id: string };
+
+function encodeCursor(position: Position): string {
+  return Buffer.from(JSON.stringify([position.createdAt.toISOString(), position.id])).toString("base64url");
+}
+
+function decodeCursor(cursor: string): Position {
+  try {
+    const [createdAt, id] = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    const time = new Date(createdAt);
+    if (typeof id !== "string" || id.length === 0 || id.length > 64 || id.includes("\u0000")) throw new Error();
+    if (typeof createdAt !== "string" || Number.isNaN(time.getTime())) throw new Error();
+    return { createdAt: time, id };
+  } catch {
+    throw errors.validation([{ path: "cursor", message: "The cursor is not valid." }]);
+  }
+}
 
 // The administrator operates the platform: accounts, roles, access and
 // oversight. Nothing here returns examination content, answer keys or
 // candidates' answers; those belong to the examiner who owns the exam.
 
 export async function listAuditLogs(filters: ListAuditLogsInput) {
+  const after = filters.cursor ? decodeCursor(filters.cursor) : undefined;
+
   const where: Prisma.AuditLogWhereInput = {
     ...(filters.actorId ? { actorId: filters.actorId } : {}),
     ...(filters.action ? { action: filters.action } : {}),
@@ -23,9 +46,28 @@ export async function listAuditLogs(filters: ListAuditLogsInput) {
       : {}),
   };
 
-  const [items, total] = await Promise.all([
+  // Entries strictly older than the cursor, in the same order as the index.
+  // The plain "createdAt <= cursor" bound looks redundant next to the OR, but
+  // it is what lets PostgreSQL start the index scan at the cursor instead of
+  // walking down from the newest entry.
+  const page: Prisma.AuditLogWhereInput = after
+    ? {
+        AND: [
+          where,
+          { createdAt: { lte: after.createdAt } },
+          {
+            OR: [
+              { createdAt: { lt: after.createdAt } },
+              { createdAt: after.createdAt, id: { lt: after.id } },
+            ],
+          },
+        ],
+      }
+    : where;
+
+  const [rows, total] = await Promise.all([
     db.auditLog.findMany({
-      where,
+      where: page,
       select: {
         id: true,
         action: true,
@@ -37,13 +79,25 @@ export async function listAuditLogs(filters: ListAuditLogsInput) {
         actor: { select: { id: true, name: true, email: true, role: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: (filters.page - 1) * filters.pageSize,
-      take: filters.pageSize,
+      // One extra row tells us whether another page exists.
+      take: filters.pageSize + 1,
     }),
-    db.auditLog.count({ where }),
+    // Counted only on request, and only for the first page.
+    filters.withTotal && !after ? db.auditLog.count({ where }) : Promise.resolve(undefined),
   ]);
 
-  return { items, meta: { page: filters.page, pageSize: filters.pageSize, total } };
+  const hasMore = rows.length > filters.pageSize;
+  const items = hasMore ? rows.slice(0, filters.pageSize) : rows;
+  const last = items.at(-1);
+
+  return {
+    items,
+    meta: {
+      pageSize: filters.pageSize,
+      nextCursor: hasMore && last ? encodeCursor(last) : null,
+      ...(total !== undefined ? { total } : {}),
+    },
+  };
 }
 
 // Counts only. "Ongoing" and "upcoming" are calculated from the slot and the

@@ -10,6 +10,7 @@ import type { ClientInfo } from "../security/client";
 export const SESSION_COOKIE = "exam_session";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const LAST_SEEN_INTERVAL_MS = 60_000;
+const SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type SessionUser = {
   id: string;
@@ -38,6 +39,13 @@ export async function createSession(
   const { count: replaced } = await tx.session.updateMany({
     where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
     data: { revokedAt: new Date() },
+  });
+
+  // Sessions that ended over a week ago serve no purpose; sign-ins are in
+  // the audit log. Removing them here keeps the table, and every session
+  // lookup, small without a background job.
+  await tx.session.deleteMany({
+    where: { userId, expiresAt: { lt: new Date(Date.now() - SESSION_RETENTION_MS) } },
   });
 
   await tx.session.create({

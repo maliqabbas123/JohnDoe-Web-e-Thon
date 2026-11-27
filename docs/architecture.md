@@ -306,6 +306,7 @@ docs/                      This documentation
 | Real-time needs | Polling and the heartbeat response. See [ADR 0011](adr/0011-polling-over-websockets.md) |
 | Background work | None. Expired attempts are closed lazily on the next read; interrupted attempts are detected when the monitor is polled |
 | Caching | API responses are `no-store` |
+| Read performance | Reads are measured at volume with a budget per endpoint; unbounded lists use cursor paging. See [Read performance](performance.md) |
 
 ## 9. Deployment
 

@@ -26,6 +26,12 @@ Lists add paging information:
 { "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
 ```
 
+Lists that can grow without bound, such as the audit log, page by cursor instead. Send `meta.nextCursor` back as `cursor` to read on; `null` means the end. `total` is included only when `withTotal=true` is sent, on the first page:
+
+```json
+{ "data": [], "meta": { "pageSize": 20, "nextCursor": null } }
+```
+
 ### Failure
 
 ```json
@@ -59,7 +65,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | Users | `GET /users`, `POST /users` | A | List and create accounts |
 | | `GET /users/{id}`, `PATCH /users/{id}` | A | Read; change name, role, activation, password |
 | Admin | `GET /admin/overview` | A | Platform counts: users, exams, attempts, disputes, sessions, failed sign-ins |
-| | `GET /admin/audit-logs` | A | Audit log with filters by actor, action, record and time range |
+| | `GET /admin/audit-logs` | A | Audit log with filters by actor, action, record and time range; cursor paging |
 | Questions | `GET /topics`, `POST /topics` | E | Topics in own bank |
 | | `GET /questions`, `POST /questions` | E | List with filters; create |
 | | `GET /questions/{id}`, `PATCH /questions/{id}`, `DELETE /questions/{id}` | E | Read, edit, archive |

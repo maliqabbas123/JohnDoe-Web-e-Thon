@@ -15,7 +15,8 @@
     "test": "npm run test:unit",
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "tsx --test \"src/**/*.test.ts\" \"tests/unit/**/*.test.ts\"",
-    "test:e2e": "tsx tests/run-e2e.ts"
+    "test:e2e": "tsx tests/run-e2e.ts",
+    "test:perf": "tsx tests/run-e2e.ts --perf"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
