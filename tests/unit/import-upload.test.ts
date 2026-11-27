@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { MAX_IMPORT_BYTES } from "../../src/server/modules/import/schemas";
-import { readQuestionImport } from "../../src/server/modules/import/upload";
+import { readImportUpload } from "../../src/server/modules/import/upload";
 
 it("enforces the byte cap for a streamed upload without Content-Length", async () => {
   const body = new ReadableStream<Uint8Array>({
@@ -16,5 +16,5 @@ it("enforces the byte cap for a streamed upload without Content-Length", async (
     body,
     duplex: "half",
   } as RequestInit & { duplex: "half" });
-  await assert.rejects(readQuestionImport(request), { status: 413, code: "PAYLOAD_TOO_LARGE" });
+  await assert.rejects(readImportUpload(request), { status: 413, code: "PAYLOAD_TOO_LARGE" });
 });

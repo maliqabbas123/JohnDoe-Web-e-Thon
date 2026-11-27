@@ -55,8 +55,8 @@ Everything that arrives from the browser is untrusted, including the frontend's 
 | Tampering | Forging server-detected incidents | Intake accepts only documented client event types and derives source, severity and receive time on the server | Built |
 | Information disclosure | Internal details in error messages | Unexpected errors are logged and returned as a generic message | Built |
 | Information disclosure | Personal data on the public verification page | Verification returns only validity, exam title, score and date; codes are random | Planned |
-| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining, question import and incident intake. Planned for autosave and candidate import |
-| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Requests over a limit receive 413 | Built |
+| Denial of service | Flooding sign-in, code joining, autosave or import | Database-backed rate limits; request size limits; pagination on lists | Built for sign-in, password change, code joining, question import, candidate import and incident intake. Planned for autosave |
+| Denial of service | Oversized request bodies | Standard JSON bodies are capped at 64 KiB. Bulk enrolment is capped at 128 KiB and 500 addresses. Question imports are capped at 512 KiB and 100 rows. Candidate imports are capped at 512 KiB and 50 rows. Requests over a limit receive 413 | Built |
 | Denial of service | Oversized or malicious uploads | 4 MB limit; PDF, PNG or JPEG only, verified from content; served as a download with `nosniff` | Planned |
 | Elevation of privilege | Registering as an administrator, or sending extra fields on sign-up | Sign-up accepts only candidate or examiner and rejects unknown fields | Built |
 | Spoofing | Bulk registration of fake accounts | Sign-up rate limit per address; administrators can deactivate accounts | Built |
@@ -103,6 +103,7 @@ Because the last group can be bypassed, the server treats those events as suppor
 
 ## 6. Privacy
 
+- Candidate import sends each generated first password only in the upload response. Account storage holds its scrypt hash, and the job history holds import counts and row errors.
 - No camera, microphone or screen recording is collected.
 - Typing is recorded as counts only, never as the keys pressed.
 - Candidates are shown, before starting, every rule and everything that will be recorded.
