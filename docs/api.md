@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams and Workspace preferences. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
+| Status | Conventions are final. Built so far: Platform, Auth, Users, Admin, Question bank, Question import, Grading, Exams, Workspace preferences and Enrolment. The rest of the endpoint list is the plan. Built endpoints are specified exactly in [`openapi.yaml`](openapi.yaml), which is the reference for the UI team |
 | Base path | `/api/v1` |
 | Related | [Architecture](architecture.md), [Security](security.md) |
 
@@ -82,7 +82,7 @@ Roles: **A** administrator, **E** examiner, **C** candidate, **P** public.
 | | `POST /exams/{id}/join-code`, `DELETE /exams/{id}/join-code` | E | Create, rotate or disable a join code |
 | Enrolment | `GET /exams/{id}/enrollments`, `POST /exams/{id}/enrollments` | E | List; enrol candidates |
 | | `DELETE /exams/{id}/enrollments/{candidateId}` | E | Remove before the first attempt |
-| | `POST /exams/{id}/retake-grants` | E | Give candidates an extra slot |
+| | `GET /exams/{id}/retake-grants`, `POST /exams/{id}/retake-grants` | E | List and grant extra slots |
 | | `POST /me/exams/join` | C | Enrol in an exam with its join code |
 | | `GET /me/exams` | C | Own upcoming, available, in-progress and completed exams |
 | | `GET /me/exams/{id}` | C | Instructions, rules and own status |

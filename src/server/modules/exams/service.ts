@@ -6,6 +6,7 @@ import type { SessionUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { calculateExamState, examRules, type ExamState } from "@/server/exam/rules";
 import { errors } from "@/server/http/errors";
+import { lockOwnedExamRow } from "./access";
 import { reviewPaper, slotProblems } from "./review";
 import type { CreateExamInput, DifficultyRulesInput, ListExamsInput, QuestionPoolInput, UpdateExamInput } from "./schemas";
 
@@ -173,10 +174,7 @@ export async function createExam(owner: SessionUser, input: CreateExamInput) {
 // must take the same exam row lock before it checks eligibility or draws a
 // paper so it cannot start using settings that just changed.
 async function lockOwnedExam(tx: Tx, ownerId: string, id: string) {
-  const [exam] = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id FROM "Exam" WHERE id = ${id} AND "ownerId" = ${ownerId} FOR UPDATE
-  `;
-  if (!exam) throw errors.notFound("Exam not found.");
+  await lockOwnedExamRow(tx, ownerId, id);
   return tx.exam.findUniqueOrThrow({ where: { id }, select: summarySelect });
 }
 
